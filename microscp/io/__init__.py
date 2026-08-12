@@ -86,9 +86,14 @@ def save_molecule(path, molecule: Molecule) -> None:
         xyz.write(path, molecule)
     elif ext in (".gjf", ".com", ".gau"):
         gaussian.write_gjf(path, molecule)
+    elif ext == ".inp":
+        orca.write_inp(path, molecule)
+    elif ext in (".in", ".qcin"):
+        qchem.write_in(path, molecule)
     elif ext == ".pdb":
         pdbfile.write(path, molecule)
     else:
         raise UnsupportedFormatError(
-            f"cannot write {ext!r} files (supported: .xyz, .gjf/.com, .pdb)"
+            f"cannot write {ext!r} files "
+            "(supported: .xyz, .gjf/.com, .inp [ORCA], .in/.qcin [Q-Chem], .pdb)"
         )

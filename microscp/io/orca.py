@@ -195,6 +195,23 @@ def read_log(path) -> ParseResult:
         normal_termination=normal_term)
 
 
+def write_inp(path, molecule: Molecule,
+              keywords: str = "B3LYP D4 def2-SVP Opt Freq",
+              nprocs: int = 8, maxcore_mb: int = 4000) -> None:
+    """Write an ORCA input file with a Cartesian * xyz block."""
+    kw = keywords.strip()
+    if not kw.startswith("!"):
+        kw = "! " + kw
+    with open(path, "w") as fh:
+        fh.write(kw + "\n")
+        fh.write(f"%pal nprocs {nprocs} end\n")
+        fh.write(f"%maxcore {maxcore_mb}\n\n")
+        fh.write(f"* xyz {molecule.charge} {molecule.multiplicity}\n")
+        for sym, (x, y, z) in zip(molecule.symbols, molecule.coords):
+            fh.write(f" {sym:<3s} {x:14.8f} {y:14.8f} {z:14.8f}\n")
+        fh.write("*\n")
+
+
 def _parse_normal_modes(lines: list[str], i: int) -> tuple[int, np.ndarray | None]:
     """Parse the ORCA NORMAL MODES matrix (3N x 3N, printed in column blocks)."""
     n = len(lines)

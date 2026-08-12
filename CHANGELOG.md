@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- ORCA (`.inp`) and Q-Chem (`.in`/`.qcin`) input writers, available from
+  File → Save As and `microscp.io.save_molecule`
+- Hydrogen bonds drawn as CYLview-style dashed lines (D–H···A criteria:
+  H···A ≤ 2.6 Å, angle ≥ 120°); toggle with `H`
+- Save dialog appends the correct extension when none is typed
+
 ## 0.1.0 — 2026-08-12
 
 Initial release.

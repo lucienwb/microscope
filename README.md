@@ -30,7 +30,7 @@ figures ready for a paper.
 Runs anywhere Python 3.10+ runs (Windows, macOS, Linux):
 
 ```bash
-git clone https://github.com/<your-username>/microscp
+git clone https://github.com/lucienwb/microscp
 cd microscp
 conda create -n microscp python=3.12   # or any venv
 conda activate microscp
@@ -62,6 +62,8 @@ microscp mycalc.log      # open a file directly
   along (GaussView-style; ring bonds move only the end atom)
 - **Delete atoms**: select and press `X` &nbsp;·&nbsp; **Undo/Redo**: `Ctrl+Z` / `Ctrl+Shift+Z`
 - **Recompute bonds**: `B` (after large geometry changes)
+- **Hydrogen bonds**: shown automatically as CYLview-style dashed lines (D–H···A
+  with H···A ≤ 2.6 Å and angle ≥ 120°); `H` toggles them
 - **Export**: File → Export Image… for high-resolution (optionally transparent) PNG
 - **Save**: File → Save As… to write `xyz`, Gaussian input (`.gjf`), or `pdb` — including edited structures
 
@@ -76,7 +78,9 @@ microscp mycalc.log      # open a file directly
 | Gaussian input (`.gjf`/`.com`) | ✅ | ✅ |
 | Gaussian formatted checkpoint (`.fchk`) | ✅ | — |
 | ORCA output (`.out`) | ✅ geometries, energies, frequencies + IR + normal modes, TD-DFT absorption, NMR shieldings | — |
+| ORCA input (`.inp`) | — | ✅ |
 | Q-Chem output (`.out`) | ✅ geometries, energies, frequencies + IR + normal modes, TD-DFT | — |
+| Q-Chem input (`.in`/`.qcin`) | — | ✅ |
 | Molden (`.molden`) | ✅ geometries, frequencies + normal modes | — |
 | PDB | ✅ | ✅ |
 
@@ -107,8 +111,9 @@ Every spectrum exports as CSV (data) or PNG/SVG/PDF (figure) for publications.
 - **M2 — formats** ✅ native ORCA/Q-Chem/Molden parsers, trajectory playback
 - **M3 — spectra** ✅ IR with mode animation, UV-Vis, NMR
 - **M4 — editing** ✅ distance/angle/dihedral adjustment with live preview, atom deletion, undo/redo
+- **Extras** ✅ ORCA/Q-Chem input writers, dashed hydrogen-bond display
 - **Ideas for later** — molecular orbital/density isosurfaces (fchk/Molden),
-  ORCA/Q-Chem input writers, H-bond dashed display, style editor, PyPI release
+  style editor, PyPI release
 
 ## Python API
 

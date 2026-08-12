@@ -24,7 +24,10 @@ OPEN_FILTER = (
     "Molecular files (*.xyz *.log *.out *.fchk *.fck *.fch *.gjf *.com *.gau "
     "*.pdb *.molden);;All files (*)"
 )
-SAVE_FILTER = "XYZ (*.xyz);;Gaussian input (*.gjf *.com);;PDB (*.pdb)"
+SAVE_FILTER = ("XYZ (*.xyz);;Gaussian input (*.gjf *.com);;"
+               "ORCA input (*.inp);;Q-Chem input (*.in *.qcin);;PDB (*.pdb)")
+_FILTER_DEFAULT_EXT = {"XYZ": ".xyz", "Gaussian": ".gjf", "ORCA": ".inp",
+                       "Q-Chem": ".in", "PDB": ".pdb"}
 
 
 class ExportImageDialog(QDialog):
@@ -181,6 +184,12 @@ class MainWindow(QMainWindow):
         self._label_actions["none"].setChecked(True)
         self._add_action(labels_menu, "&Cycle Labels", "L", self._cycle_labels)
 
+        self._hbond_action = QAction("Show &Hydrogen Bonds", self, checkable=True)
+        self._hbond_action.setChecked(True)
+        self._hbond_action.setShortcut(QKeySequence("H"))
+        self._hbond_action.toggled.connect(self._toggle_hbonds)
+        view_menu.addAction(self._hbond_action)
+
         view_menu.addSeparator()
         self._add_action(view_menu, "&Align View to Selection", "A", self._align_view)
         self._add_action(view_menu, "&Center on Selected Atom", "C", self._center_atom)
@@ -297,9 +306,15 @@ class MainWindow(QMainWindow):
         if self.viewport.molecule is None:
             QMessageBox.information(self, "Nothing to save", "Open a file first.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save structure", "", SAVE_FILTER)
+        path, chosen = QFileDialog.getSaveFileName(self, "Save structure", "",
+                                                   SAVE_FILTER)
         if not path:
             return
+        if not Path(path).suffix:
+            for name, ext in _FILTER_DEFAULT_EXT.items():
+                if chosen.startswith(name):
+                    path += ext
+                    break
         try:
             mio.save_molecule(path, self.viewport.molecule)
             self.statusBar().showMessage(f"Saved {path}", 5000)
@@ -391,6 +406,13 @@ class MainWindow(QMainWindow):
         if not self._edited:
             self._edited = True
             self._file_label.setText(self._file_label.text() + "  ·  ✎ edited")
+
+    def _toggle_hbonds(self, checked: bool):
+        self.viewport.style.show_hbonds = checked
+        if self.viewport.molecule is not None:
+            self.viewport._rebuild_scene()
+        self.statusBar().showMessage(
+            f"Hydrogen bonds {'shown' if checked else 'hidden'}", 3000)
 
     def _toggle_spectra(self):
         if not self.spectra_dock.has_data:

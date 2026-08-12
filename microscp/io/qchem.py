@@ -111,6 +111,23 @@ def read_log(path) -> ParseResult:
         excited_states=excited, normal_termination=normal_term)
 
 
+def write_in(path, molecule: Molecule, rem: dict | None = None) -> None:
+    """Write a Q-Chem input file ($molecule + $rem sections)."""
+    rem_final = {"JOBTYPE": "opt", "METHOD": "B3LYP", "BASIS": "6-31G(d)"}
+    if rem:
+        rem_final.update({str(k).upper(): v for k, v in rem.items()})
+    with open(path, "w") as fh:
+        fh.write("$molecule\n")
+        fh.write(f"{molecule.charge} {molecule.multiplicity}\n")
+        for sym, (x, y, z) in zip(molecule.symbols, molecule.coords):
+            fh.write(f" {sym:<3s} {x:14.8f} {y:14.8f} {z:14.8f}\n")
+        fh.write("$end\n\n$rem\n")
+        width = max(len(k) for k in rem_final)
+        for key, value in rem_final.items():
+            fh.write(f"   {key:<{width}s}   {value}\n")
+        fh.write("$end\n")
+
+
 def _parse_freq_block(lines: list[str], i: int, vibrations: list[Vibration]) -> int:
     """Parse one 'Mode: a b c' column group; return next line index."""
     n = len(lines)

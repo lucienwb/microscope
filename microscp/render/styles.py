@@ -29,6 +29,11 @@ class Style:
     min_atom_radius: float = 0.21        # keeps H spheres visible
     palette: dict = field(default_factory=lambda: dict(CYLVIEW_COLORS))
     background: tuple = (1.0, 1.0, 1.0)
+    show_hbonds: bool = True
+    hbond_radius: float = 0.055
+    hbond_color: tuple = (0.45, 0.45, 0.45)
+    hbond_dash: float = 0.20             # dash length, Angstrom
+    hbond_gap: float = 0.14              # gap between dashes
 
     def atom_radius(self, z: int) -> float:
         return max(elements.covalent_radius(z) * self.atom_scale, self.min_atom_radius)
