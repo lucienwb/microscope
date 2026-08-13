@@ -8,9 +8,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 
 from ..core.molecule import Molecule
+from ..core.volume import VolumeData
 from .camera import OrthoCamera
 from .glrenderer import MoleculeRenderer, create_fbo, delete_fbo
-from .scene import build_scene
+from .scene import build_scene, build_surface_meshes
 from .styles import Style
 
 MAX_RENDER_DIM = 8192
@@ -18,7 +19,10 @@ MAX_RENDER_DIM = 8192
 
 def render_molecule_image(molecule: Molecule, style: Style, camera: OrthoCamera,
                           width: int, height: int, supersample: int = 3,
-                          transparent: bool = False) -> QImage:
+                          transparent: bool = False,
+                          volume: VolumeData | None = None,
+                          isovalue: float | None = None,
+                          reps: np.ndarray | None = None) -> QImage:
     """Render to a QImage of (width, height); supersampled for anti-aliasing."""
     ss = max(1, int(supersample))
     while ss > 1 and max(width, height) * ss > MAX_RENDER_DIM:
@@ -42,9 +46,13 @@ def render_molecule_image(molecule: Molecule, style: Style, camera: OrthoCamera,
     try:
         renderer = MoleculeRenderer()
         renderer.initialize()
+        renderer.set_style_params(style.quadrant_color, style.quadrant_width)
         if molecule.bonds is None:
             molecule.perceive_bonds()
-        renderer.set_scene(build_scene(molecule, style))
+        renderer.set_scene(build_scene(molecule, style, reps))
+        if volume is not None:
+            level = volume.suggest_isovalue() if isovalue is None else isovalue
+            renderer.set_meshes(build_surface_meshes(volume, level, style))
         fbo, color, depth = create_fbo(w, h)
         try:
             bg = (*style.background, 0.0 if transparent else 1.0)

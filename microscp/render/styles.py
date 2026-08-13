@@ -34,9 +34,39 @@ class Style:
     hbond_color: tuple = (0.45, 0.45, 0.45)
     hbond_dash: float = 0.20             # dash length, Angstrom
     hbond_gap: float = 0.14              # gap between dashes
+    surface_positive: tuple = (0.29, 0.44, 0.86)   # isosurface + lobe (blue)
+    surface_negative: tuple = (0.88, 0.38, 0.22)   # isosurface - lobe (orange-red)
+    surface_opacity: float = 0.62
+    bond_color: tuple | None = None      # uniform bonds (None = split by atom)
+    quadrant_color: tuple | None = None  # seam lines on heavy atoms (Houkmol)
+    quadrant_width: float = 0.055        # seam line width (fraction of radius)
 
     def atom_radius(self, z: int) -> float:
         return max(elements.covalent_radius(z) * self.atom_scale, self.min_atom_radius)
 
     def atom_color(self, z: int) -> tuple[float, float, float]:
         return self.palette.get(int(z), elements.cpk_color(z))
+
+
+def houk_style() -> Style:
+    """The Houk-group look ("Houkmol" in CYLview): glossy ball-and-stick with
+    black bonds, near-white carbons and two black great-circle seam lines
+    ("quadrants") on every heavy atom, rotating with the molecule."""
+    return Style(
+        name="houk",
+        bond_radius=0.12,
+        atom_scale=0.47,
+        min_atom_radius=0.24,
+        palette={**CYLVIEW_COLORS,
+                 6: (0.90, 0.90, 0.90),       # C near-white
+                 7: (0.38, 0.40, 0.90)},      # N soft blue-violet
+        bond_color=(0.07, 0.07, 0.07),
+        quadrant_color=(0.05, 0.05, 0.05),
+    )
+
+
+STYLE_PRESETS = {"cylview": Style, "houk": houk_style}
+
+
+def make_style(name: str) -> Style:
+    return STYLE_PRESETS[name]()

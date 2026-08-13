@@ -7,18 +7,18 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from ..core import editing, geometry
+from ..core import editing
 from ..core.molecule import Molecule
+from ..core.volume import VolumeData
 from ..render.camera import OrthoCamera, orientation_along, orientation_from_plane
 from ..render.glrenderer import MoleculeRenderer
-from ..render.scene import build_scene
-from ..render.styles import Style
+from ..render.scene import build_scene, build_surface_meshes
+from ..render.styles import Style, make_style
+from . import annotations
 
 _MARKER_COLOR = QColor(235, 130, 20)
 _LINE_COLOR = QColor(60, 60, 60)
 _PIN_COLOR = QColor(95, 95, 95)
-_TEXT_COLOR = QColor(25, 25, 25)
-_HALO_COLOR = QColor(255, 255, 255)
 
 LABEL_MODES = ("none", "element", "element+number", "number")
 
@@ -34,10 +34,16 @@ class MoleculeViewport(QOpenGLWidget):
         self.molecule: Molecule | None = None
         self.selection: list[int] = []
         self.pinned: list[list[int]] = []
+        self.atom_reps: np.ndarray | None = None   # per-atom REP_* codes
         self.label_mode = "none"
         self._renderer = MoleculeRenderer()
         self._scene = None
         self._scene_dirty = False
+        self.volume: VolumeData | None = None
+        self.isovalue: float = 0.02
+        self.surface_visible = True
+        self._surface_meshes: list = []
+        self._mesh_dirty = False
         self._last_pos = None
         self._press_pos = None
         self._overlay_ok = True
@@ -54,15 +60,20 @@ class MoleculeViewport(QOpenGLWidget):
 
     def set_molecule(self, molecule: Molecule | None, keep_camera: bool = False) -> None:
         self.stop_animation()
+        if self.volume is not None:      # a new structure invalidates the grid
+            self.volume = None
+            self._surface_meshes = []
+            self._mesh_dirty = True
         old_natoms = self.molecule.natoms if self.molecule is not None else -1
         self.molecule = molecule
         self.selection.clear()
         if molecule is not None:
             if molecule.bonds is None:
                 molecule.perceive_bonds()
-            self._scene = build_scene(molecule, self.style)
             if molecule.natoms != old_natoms:
                 self.pinned.clear()
+                self.atom_reps = None    # mixed representations reset too
+            self._scene = build_scene(molecule, self.style, self.atom_reps)
             if not keep_camera:
                 center, radius = molecule.bounding_sphere()
                 self.camera.fit(center, radius)
@@ -80,6 +91,46 @@ class MoleculeViewport(QOpenGLWidget):
             self.camera.fit(center, radius)
             self.update()
 
+    # ------------------------------------------------------------------ volume
+
+    @property
+    def has_volume(self) -> bool:
+        return self.volume is not None
+
+    def set_volume(self, volume: VolumeData | None, isovalue: float | None = None) -> None:
+        """Attach volumetric data (cube grid) and show its isosurface."""
+        self.volume = volume
+        if volume is not None:
+            self.isovalue = float(isovalue) if isovalue else volume.suggest_isovalue()
+            self.surface_visible = True
+        self._update_surface()
+
+    def set_isosurface(self, isovalue: float | None = None,
+                       visible: bool | None = None,
+                       opacity: float | None = None,
+                       positive_color: tuple | None = None,
+                       negative_color: tuple | None = None) -> None:
+        if isovalue is not None:
+            self.isovalue = float(isovalue)
+        if visible is not None:
+            self.surface_visible = bool(visible)
+        if opacity is not None:
+            self.style.surface_opacity = float(opacity)
+        if positive_color is not None:
+            self.style.surface_positive = tuple(positive_color)
+        if negative_color is not None:
+            self.style.surface_negative = tuple(negative_color)
+        self._update_surface()
+
+    def _update_surface(self) -> None:
+        if self.volume is not None and self.surface_visible and self.isovalue:
+            self._surface_meshes = build_surface_meshes(
+                self.volume, self.isovalue, self.style)
+        else:
+            self._surface_meshes = []
+        self._mesh_dirty = True
+        self.update()
+
     # ------------------------------------------------------------------ labels
 
     def set_label_mode(self, mode: str) -> None:
@@ -93,24 +144,7 @@ class MoleculeViewport(QOpenGLWidget):
         self.update()
         return self.label_mode
 
-    def _atom_label(self, i: int) -> str:
-        sym = self.molecule.symbols[i]
-        if self.label_mode == "element":
-            return sym
-        if self.label_mode == "number":
-            return str(i + 1)
-        return f"{sym}{i + 1}"
-
     # ------------------------------------------------------------------ measurements
-
-    @staticmethod
-    def _measure_value(mol: Molecule, idxs: list[int]) -> str:
-        pts = [mol.coords[i] for i in idxs]
-        if len(idxs) == 2:
-            return f"{geometry.distance(*pts):.3f} Å"
-        if len(idxs) == 3:
-            return f"{geometry.angle(*pts):.1f}°"
-        return f"{geometry.dihedral(*pts):.1f}°"
 
     def measurement_text(self) -> str:
         if self.molecule is None or not self.selection:
@@ -118,9 +152,12 @@ class MoleculeViewport(QOpenGLWidget):
         if len(self.selection) == 1:
             i = self.selection[0]
             return f"{self.molecule.symbols[i]}{i + 1} selected"
+        if len(self.selection) > 4:
+            return f"{len(self.selection)} atoms selected"
         tags = "–".join(f"{self.molecule.symbols[i]}{i + 1}" for i in self.selection)
         kind = {2: "d", 3: "∠", 4: "φ"}[len(self.selection)]
-        return f"{kind}({tags}) = {self._measure_value(self.molecule, self.selection)}"
+        value = annotations.measurement_value(self.molecule, self.selection)
+        return f"{kind}({tags}) = {value}"
 
     def pin_selection(self) -> bool:
         """Keep the current 2–4 atom measurement permanently displayed."""
@@ -179,8 +216,36 @@ class MoleculeViewport(QOpenGLWidget):
         self._rebuild_scene()
 
     def _rebuild_scene(self):
-        self._scene = build_scene(self.molecule, self.style)
+        if self.atom_reps is not None and len(self.atom_reps) != self.molecule.natoms:
+            self.atom_reps = None        # atom count changed (delete/undo)
+        self._scene = build_scene(self.molecule, self.style, self.atom_reps)
         self._scene_dirty = True
+        self.update()
+
+    def set_atom_representation(self, rep: int, atoms: list[int] | None = None) -> None:
+        """Apply a REP_* code to *atoms* (None/empty = every atom)."""
+        if self.molecule is None:
+            return
+        if self.atom_reps is None or len(self.atom_reps) != self.molecule.natoms:
+            self.atom_reps = np.zeros(self.molecule.natoms, dtype=int)
+        if atoms:
+            self.atom_reps[list(atoms)] = rep
+        else:
+            self.atom_reps[:] = rep
+        self._rebuild_scene()
+
+    def set_representation(self, name: str) -> None:
+        """Switch style preset (cylview / houk), keeping user adjustments."""
+        if name == self.style.name:
+            return
+        new = make_style(name)
+        new.show_hbonds = self.style.show_hbonds
+        new.surface_positive = self.style.surface_positive
+        new.surface_negative = self.style.surface_negative
+        new.surface_opacity = self.style.surface_opacity
+        self.style = new
+        if self.molecule is not None:
+            self._rebuild_scene()
         self.update()
 
     # ------------------------------------------------------------------ editing
@@ -336,6 +401,9 @@ class MoleculeViewport(QOpenGLWidget):
             if self._scene is not None:
                 self._renderer.set_scene(self._scene)
             self._scene_dirty = False
+        if self._mesh_dirty:
+            self._renderer.set_meshes(self._surface_meshes)
+            self._mesh_dirty = False
         if self._scene is None:
             from OpenGL import GL
             GL.glClearColor(*self.style.background, 1.0)
@@ -343,6 +411,8 @@ class MoleculeViewport(QOpenGLWidget):
             return
         view = self.camera.view_matrix()
         proj = self.camera.proj_matrix(w / h)
+        self._renderer.set_style_params(self.style.quadrant_color,
+                                        self.style.quadrant_width)
         self._renderer.draw(view, proj, w, h, background=(*self.style.background, 1.0))
         overlay_needed = bool(self.selection or self.pinned or self.label_mode != "none")
         if overlay_needed and self._overlay_ok:
@@ -353,85 +423,38 @@ class MoleculeViewport(QOpenGLWidget):
 
     # ------------------------------------------------------------------ overlay
 
-    @staticmethod
-    def _draw_halo_text(painter: QPainter, x: float, y: float, text: str) -> None:
-        x, y = int(x), int(y)
-        painter.setPen(QPen(_HALO_COLOR))
-        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            painter.drawText(x + dx, y + dy, text)
-        painter.setPen(QPen(_TEXT_COLOR))
-        painter.drawText(x, y, text)
-
-    def _overlay_metrics(self) -> dict:
-        """Sizes that track the zoom level so text stays legible at any scale."""
-        px_per_ang = self.height() / (2.0 * self.camera.half_height)
-        return {
-            "label_px": int(np.clip(0.17 * px_per_ang, 9, 34)),
-            "value_px": int(np.clip(0.20 * px_per_ang, 10, 40)),
-            "marker_r": float(np.clip(0.14 * px_per_ang, 8, 60)),
-            "offset": int(np.clip(0.09 * px_per_ang, 5, 24)),
-            "line_w": float(np.clip(0.018 * px_per_ang, 1.3, 3.5)),
-        }
-
     def _draw_overlay(self):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         mol = self.molecule
-        pts = self.camera.project(mol.coords, self.width(), self.height())
-        m = self._overlay_metrics()
+        w, h = self.width(), self.height()
+        pts = self.camera.project(mol.coords, w, h)
+        m = annotations.overlay_metrics(h, self.camera.half_height)
 
         if self.label_mode != "none":
-            font = QFont()
-            font.setPixelSize(m["label_px"])
-            painter.setFont(font)
-            for i in range(mol.natoms):
-                self._draw_halo_text(painter, pts[i, 0] + m["offset"],
-                                     pts[i, 1] - m["offset"], self._atom_label(i))
+            annotations.draw_atom_labels(painter, mol, pts, m, self.label_mode)
 
-        if self.pinned:
-            font = QFont()
-            font.setPixelSize(m["value_px"])
-            painter.setFont(font)
-            for idxs in self.pinned:
-                p = pts[idxs]
-                pen = QPen(_PIN_COLOR)
-                pen.setWidthF(m["line_w"])
-                pen.setStyle(Qt.PenStyle.DashLine)
-                painter.setPen(pen)
-                for k in range(len(p) - 1):
-                    painter.drawLine(int(p[k, 0]), int(p[k, 1]),
-                                     int(p[k + 1, 0]), int(p[k + 1, 1]))
-                if len(idxs) == 2:
-                    ax, ay = (p[0] + p[1]) / 2.0
-                elif len(idxs) == 3:
-                    ax, ay = p[1]
-                else:
-                    ax, ay = (p[1] + p[2]) / 2.0
-                self._draw_halo_text(painter, ax + m["offset"], ay - m["offset"],
-                                     self._measure_value(mol, idxs))
+        for idxs in self.pinned:
+            annotations.draw_measurement(painter, mol, self.camera, w, h,
+                                         idxs, m, color=_PIN_COLOR)
 
         if self.selection:
-            p = pts[self.selection]
-            pen = QPen(_LINE_COLOR)
-            pen.setWidthF(m["line_w"])
-            pen.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            for k in range(len(p) - 1):
-                painter.drawLine(int(p[k, 0]), int(p[k, 1]),
-                                 int(p[k + 1, 0]), int(p[k + 1, 1]))
+            if 2 <= len(self.selection) <= 4:   # larger selections: markers only
+                annotations.draw_measurement(painter, mol, self.camera, w, h,
+                                             self.selection, m, color=_LINE_COLOR)
             marker_pen = QPen(_MARKER_COLOR)
             marker_pen.setWidthF(max(2.0, m["line_w"]))
             painter.setPen(marker_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             r = m["marker_r"]
-            for x, y in p:
+            for x, y in pts[self.selection]:
                 painter.drawEllipse(int(x - r), int(y - r), int(2 * r), int(2 * r))
             text = self.measurement_text()
             if text:
                 font = QFont()
                 font.setPointSize(11)   # HUD text: fixed, screen-anchored
                 painter.setFont(font)
-                self._draw_halo_text(painter, 12, self.height() - 14, text)
+                annotations.draw_halo_text(painter, 12, h - 14, text)
         painter.end()
 
     # ------------------------------------------------------------------ input
@@ -490,9 +513,7 @@ class MoleculeViewport(QOpenGLWidget):
             if idx in self.selection:
                 self.selection.remove(idx)
             else:
-                self.selection.append(idx)
-                if len(self.selection) > 4:
-                    self.selection.pop(0)
+                self.selection.append(idx)   # unlimited; info shown for 2-4
         else:
             self.selection.clear()
         self.selectionChanged.emit(self.measurement_text())

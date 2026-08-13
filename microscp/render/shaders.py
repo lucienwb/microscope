@@ -25,12 +25,14 @@ layout(location = 0) in vec2 corner;
 layout(location = 1) in vec3 iCenter;
 layout(location = 2) in float iRadius;
 layout(location = 3) in vec3 iColor;
+layout(location = 4) in float iQuad;
 uniform mat4 uView;
 uniform mat4 uProj;
 out vec2 vCorner;
 flat out vec3 vColor;
 flat out vec3 vCenter;
 flat out float vRadius;
+flat out float vQuad;
 flat out int vId;
 
 void main() {
@@ -39,6 +41,7 @@ void main() {
     vColor = iColor;
     vCenter = c;
     vRadius = iRadius;
+    vQuad = iQuad;
     vId = gl_InstanceID;
     vec3 pos = c + vec3(corner * iRadius, 0.0);
     gl_Position = uProj * vec4(pos, 1.0);
@@ -50,9 +53,14 @@ in vec2 vCorner;
 flat in vec3 vColor;
 flat in vec3 vCenter;
 flat in float vRadius;
+flat in float vQuad;
 flat in int vId;
 uniform mat4 uProj;
 uniform int uPick;
+uniform vec3 uQuadColor;
+uniform float uQuadWidth; // 0 = no seam lines
+uniform vec3 uQuadA;      // view-space seam plane normals (world axes,
+uniform vec3 uQuadB;      // so the seams rotate with the molecule)
 out vec4 fragColor;
 """ + _LIGHTING + """
 void main() {
@@ -70,7 +78,12 @@ void main() {
                          float((id >> 16) & 0xFF) / 255.0, 1.0);
         return;
     }
-    fragColor = vec4(shade(n, vColor), 1.0);
+    vec3 base = vColor;
+    // Houkmol "quadrants": two orthogonal great-circle seam lines
+    if (vQuad > 0.5 && uQuadWidth > 0.0 &&
+        (abs(dot(n, uQuadA)) < uQuadWidth || abs(dot(n, uQuadB)) < uQuadWidth))
+        base = uQuadColor;
+    fragColor = vec4(shade(n, base), 1.0);
 }
 """
 
@@ -150,5 +163,30 @@ void main() {
     }
     vec3 base = (t < 0.5 * L) ? vColorA : vColorB;
     fragColor = vec4(shade(n, base), 1.0);
+}
+"""
+
+MESH_VERT = """#version 330 core
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+uniform mat4 uView;
+uniform mat4 uProj;
+out vec3 vNormal;
+
+void main() {
+    vNormal = mat3(uView) * normal;
+    gl_Position = uProj * (uView * vec4(position, 1.0));
+}
+"""
+
+MESH_FRAG = """#version 330 core
+in vec3 vNormal;
+uniform vec4 uColor;    // rgb + opacity
+out vec4 fragColor;
+""" + _LIGHTING + """
+void main() {
+    vec3 n = normalize(vNormal);
+    if (n.z < 0.0) n = -n;   // two-sided: light whichever face shows
+    fragColor = vec4(shade(n, uColor.rgb), uColor.a);
 }
 """

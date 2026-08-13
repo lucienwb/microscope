@@ -28,14 +28,18 @@ from microscp.gui.app import MainWindow  # noqa: E402
 DATA = Path(__file__).resolve().parents[1] / "tests" / "data" / "dvb_ir.out"
 
 
-def ring_triple(mol):
-    """Find a bonded C–C–C triple (vertex with two carbon neighbors)."""
-    zs = mol.atomic_numbers
+def _neighbors(mol) -> dict[int, list[int]]:
     neighbors: dict[int, list[int]] = {}
     for i, j in mol.bonds:
         neighbors.setdefault(int(i), []).append(int(j))
         neighbors.setdefault(int(j), []).append(int(i))
-    for k, nbrs in neighbors.items():
+    return neighbors
+
+
+def ring_triple(mol):
+    """Find a bonded C–C–C triple (vertex with two carbon neighbors)."""
+    zs = mol.atomic_numbers
+    for k, nbrs in _neighbors(mol).items():
         cn = [n for n in nbrs if zs[n] == 6]
         if zs[k] == 6 and len(cn) >= 2:
             return [cn[0], k, cn[1]]
@@ -66,9 +70,17 @@ def main():
         triple = ring_triple(mol)
         vp.selection = list(triple)
         vp.align_to_selection()
-        # pin the ring angle, then a C-C bond distance
+        # pin the ring angle, then a C-C bond distance far from it (no overlap)
         vp.pin_selection()
-        i, j = (int(x) for x in mol.bonds[0])
+        zs = mol.atomic_numbers
+        heavy = {k: sum(1 for n in nb if zs[n] > 1)
+                 for k, nb in _neighbors(mol).items()}
+        vertex = mol.coords[triple[1]]
+        i, j = max(((int(i), int(j)) for i, j in mol.bonds
+                    if zs[i] == 6 and zs[j] == 6
+                    and heavy[int(i)] >= 2 and heavy[int(j)] >= 2),
+                   key=lambda b: np.linalg.norm(
+                       (mol.coords[b[0]] + mol.coords[b[1]]) / 2.0 - vertex))
         vp.selection = [i, j]
         vp.pin_selection()
         # labels on

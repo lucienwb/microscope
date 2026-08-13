@@ -8,7 +8,8 @@ import numpy as np
 from OpenGL import GL
 
 from .scene import SceneBuffers
-from .shaders import CYLINDER_FRAG, CYLINDER_VERT, SPHERE_FRAG, SPHERE_VERT
+from .shaders import (CYLINDER_FRAG, CYLINDER_VERT, MESH_FRAG, MESH_VERT,
+                      SPHERE_FRAG, SPHERE_VERT)
 
 
 class RendererError(RuntimeError):
@@ -66,7 +67,7 @@ def delete_fbo(fbo, color, depth) -> None:
 
 
 class MoleculeRenderer:
-    SPHERE_STRIDE = 7 * 4
+    SPHERE_STRIDE = 8 * 4
     CYLINDER_STRIDE = 13 * 4
 
     def __init__(self):
@@ -74,10 +75,20 @@ class MoleculeRenderer:
         self._nspheres = 0
         self._ncylinders = 0
         self._supports_sample_shading = False
+        self._meshes: list[tuple[int, int, int, tuple]] = []  # vao, vbo, nverts, rgba
+        self._quad_color = (0.0, 0.0, 0.0)
+        self._quad_width = 0.0
+
+    def set_style_params(self, quad_color: tuple | None = None,
+                         quad_width: float = 0.0) -> None:
+        """Houkmol seam-line ("quadrant") parameters from the Style."""
+        self._quad_color = tuple(quad_color) if quad_color else (0.0, 0.0, 0.0)
+        self._quad_width = float(quad_width) if quad_color else 0.0
 
     def initialize(self) -> None:
         self._sphere_prog = _link_program(SPHERE_VERT, SPHERE_FRAG)
         self._cyl_prog = _link_program(CYLINDER_VERT, CYLINDER_FRAG)
+        self._mesh_prog = _link_program(MESH_VERT, MESH_FRAG)
 
         quad = np.array([-1, -1, 1, -1, -1, 1, 1, 1], dtype=np.float32)
         self._quad_vbo = GL.glGenBuffers(1)
@@ -88,7 +99,7 @@ class MoleculeRenderer:
 
         self._sphere_vao = self._make_vao(
             self._sphere_vbo, self.SPHERE_STRIDE,
-            ((1, 3, 0), (2, 1, 12), (3, 3, 16)),
+            ((1, 3, 0), (2, 1, 12), (3, 3, 16), (4, 1, 28)),
         )
         self._cyl_vao = self._make_vao(
             self._cyl_vbo, self.CYLINDER_STRIDE,
@@ -124,6 +135,33 @@ class MoleculeRenderer:
                         scene.cylinders, GL.GL_DYNAMIC_DRAW)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
+    def set_meshes(self, meshes) -> None:
+        """Upload translucent triangle meshes: (vertices, normals, rgba) tuples.
+
+        Vertices/normals are (N, 3) float32 with consecutive vertex triples
+        forming triangles. Requires a current GL context (like set_scene).
+        """
+        for vao, vbo, _count, _color in self._meshes:
+            GL.glDeleteVertexArrays(1, [vao])
+            GL.glDeleteBuffers(1, [vbo])
+        self._meshes = []
+        for verts, normals, rgba in meshes:
+            if len(verts) == 0:
+                continue
+            data = np.hstack([verts, normals]).astype(np.float32)
+            vbo = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data, GL.GL_STATIC_DRAW)
+            vao = GL.glGenVertexArrays(1)
+            GL.glBindVertexArray(vao)
+            for loc, offset in ((0, 0), (1, 12)):
+                GL.glEnableVertexAttribArray(loc)
+                GL.glVertexAttribPointer(loc, 3, GL.GL_FLOAT, GL.GL_FALSE,
+                                         24, ctypes.c_void_p(offset))
+            GL.glBindVertexArray(0)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            self._meshes.append((vao, vbo, len(verts), tuple(rgba)))
+
     def draw(self, view: np.ndarray, proj: np.ndarray, width: int, height: int,
              background=(1.0, 1.0, 1.0, 1.0), pick: bool = False,
              sample_shading: bool = True) -> None:
@@ -144,6 +182,11 @@ class MoleculeRenderer:
         vm = np.ascontiguousarray(view, dtype=np.float32)
         pm = np.ascontiguousarray(proj, dtype=np.float32)
 
+        # Houkmol seam planes: world x/y axes in view space, so the seam
+        # lines rotate with the molecule
+        quad_a = np.ascontiguousarray(vm[:3, 0])
+        quad_b = np.ascontiguousarray(vm[:3, 1])
+
         batches = ((self._sphere_prog, self._sphere_vao, self._nspheres),
                    (self._cyl_prog, self._cyl_vao, self._ncylinders))
         for prog, vao, count in batches:
@@ -154,8 +197,45 @@ class MoleculeRenderer:
             GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog, "uProj"), 1, GL.GL_TRUE, pm)
             GL.glUniform3fv(GL.glGetUniformLocation(prog, "uLightDir"), 1, light)
             GL.glUniform1i(GL.glGetUniformLocation(prog, "uPick"), 1 if pick else 0)
+            loc = GL.glGetUniformLocation(prog, "uQuadColor")
+            if loc != -1:
+                GL.glUniform3f(loc, *self._quad_color)
+                GL.glUniform1f(GL.glGetUniformLocation(prog, "uQuadWidth"),
+                               self._quad_width)
+                GL.glUniform3fv(GL.glGetUniformLocation(prog, "uQuadA"), 1, quad_a)
+                GL.glUniform3fv(GL.glGetUniformLocation(prog, "uQuadB"), 1, quad_b)
             GL.glBindVertexArray(vao)
             GL.glDrawArraysInstanced(GL.GL_TRIANGLE_STRIP, 0, 4, count)
+
+        if self._meshes and not pick:
+            GL.glUseProgram(self._mesh_prog)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(self._mesh_prog, "uView"),
+                                  1, GL.GL_TRUE, vm)
+            GL.glUniformMatrix4fv(GL.glGetUniformLocation(self._mesh_prog, "uProj"),
+                                  1, GL.GL_TRUE, pm)
+            GL.glUniform3fv(GL.glGetUniformLocation(self._mesh_prog, "uLightDir"),
+                            1, light)
+            color_loc = GL.glGetUniformLocation(self._mesh_prog, "uColor")
+            # translucent surfaces, two passes: prime the depth buffer with the
+            # nearest surface layer, then blend exactly that layer once —
+            # interior/back faces never bleed through as facet noise
+            GL.glColorMask(False, False, False, False)
+            for vao, _vbo, count, _rgba in self._meshes:
+                GL.glBindVertexArray(vao)
+                GL.glDrawArrays(GL.GL_TRIANGLES, 0, count)
+            GL.glColorMask(True, True, True, True)
+            GL.glDepthFunc(GL.GL_LEQUAL)
+            GL.glDepthMask(GL.GL_FALSE)
+            GL.glEnable(GL.GL_BLEND)
+            GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                                   GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)
+            for vao, _vbo, count, rgba in self._meshes:
+                GL.glUniform4f(color_loc, *rgba)
+                GL.glBindVertexArray(vao)
+                GL.glDrawArrays(GL.GL_TRIANGLES, 0, count)
+            GL.glDepthMask(GL.GL_TRUE)
+            GL.glDepthFunc(GL.GL_LESS)
+            GL.glDisable(GL.GL_BLEND)
 
         GL.glBindVertexArray(0)
         GL.glUseProgram(0)

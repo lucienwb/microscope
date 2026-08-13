@@ -6,10 +6,14 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QSurfaceFormat
+from PySide6.QtGui import (
+    QAction, QActionGroup, QColor, QImage, QImageWriter, QKeySequence, QPainter,
+    QSurfaceFormat,
+)
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
-    QLabel, QMainWindow, QMessageBox, QPushButton, QSlider, QSpinBox, QToolBar,
+    QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
+    QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QMainWindow,
+    QMessageBox, QPushButton, QSlider, QSpinBox, QToolBar, QWidget,
 )
 
 from .. import __version__
@@ -17,17 +21,41 @@ from .. import io as mio
 from ..core import geometry
 from ..core.results import ParseResult
 from ..render.offscreen import render_molecule_image
+from ..render.scene import REP_BALL, REP_LINE, REP_STICK
+from .annotations import draw_annotations
 from .spectra import SpectraDock
 from .viewport import MoleculeViewport
 
 OPEN_FILTER = (
     "Molecular files (*.xyz *.log *.out *.fchk *.fck *.fch *.gjf *.com *.gau "
-    "*.pdb *.molden);;All files (*)"
+    "*.pdb *.molden *.cube *.cub);;All files (*)"
 )
 SAVE_FILTER = ("XYZ (*.xyz);;Gaussian input (*.gjf *.com);;"
                "ORCA input (*.inp);;Q-Chem input (*.in *.qcin);;PDB (*.pdb)")
 _FILTER_DEFAULT_EXT = {"XYZ": ".xyz", "Gaussian": ".gjf", "ORCA": ".inp",
                        "Q-Chem": ".in", "PDB": ".pdb"}
+
+EXPORT_FILTER = "PNG image (*.png);;TIFF image, uncompressed (*.tif *.tiff)"
+_EXPORT_DEFAULT_EXT = {"PNG": ".png", "TIFF": ".tif"}
+
+# Curated isosurface color pairs (+ lobe, - lobe); custom colors via the picker.
+SURFACE_PALETTES = (
+    ("Blue / Red", (0.29, 0.44, 0.86), (0.88, 0.38, 0.22)),
+    ("Red / Blue", (0.88, 0.38, 0.22), (0.29, 0.44, 0.86)),
+    ("Teal / Orange", (0.13, 0.59, 0.62), (0.95, 0.52, 0.16)),
+    ("Purple / Gold", (0.55, 0.36, 0.76), (0.93, 0.69, 0.13)),
+    ("Green / Magenta", (0.30, 0.63, 0.36), (0.79, 0.29, 0.62)),
+    ("Slate / Silver", (0.36, 0.42, 0.52), (0.72, 0.75, 0.80)),
+)
+
+
+def _write_image(image: QImage, path: str) -> None:
+    """Save as PNG or TIFF — both keep the transparent background intact."""
+    writer = QImageWriter(path)
+    if Path(path).suffix.lower() in (".tif", ".tiff"):
+        writer.setCompression(0)                # lossless master copy
+    if not writer.write(image):
+        raise RuntimeError(writer.errorString() or f"could not write {path}")
 
 
 class ExportImageDialog(QDialog):
@@ -40,8 +68,13 @@ class ExportImageDialog(QDialog):
         self.scale.setValue(3)
         self.transparent = QCheckBox()
         self.transparent.setChecked(True)
+        self.annotations = QCheckBox()
+        self.annotations.setChecked(True)
+        self.annotations.setToolTip(
+            "Draw atom labels and pinned measurements into the exported image")
         layout.addRow("Resolution scale:", self.scale)
         layout.addRow("Transparent background:", self.transparent)
+        layout.addRow("Labels and measurements:", self.annotations)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
@@ -124,12 +157,135 @@ class AdjustDialog(QDialog):
         super().reject()
 
 
+class SurfaceDialog(QDialog):
+    """Modeless isosurface controls for the loaded cube file (live update)."""
+
+    def __init__(self, viewport: MoleculeViewport, volumes: list, parent=None):
+        super().__init__(parent)
+        self.viewport = viewport
+        self.volumes = volumes
+        self.setWindowTitle("Isosurface")
+        layout = QFormLayout(self)
+
+        if len(volumes) > 1:
+            self.which = QComboBox()
+            self.which.addItems([v.label or f"grid {i + 1}"
+                                 for i, v in enumerate(volumes)])
+            self.which.setCurrentIndex(
+                next((i for i, v in enumerate(volumes) if v is viewport.volume), 0))
+            self.which.currentIndexChanged.connect(self._switch_volume)
+            layout.addRow("Data:", self.which)
+        elif volumes and volumes[0].label:
+            layout.addRow(QLabel(volumes[0].label))
+
+        self.iso = QDoubleSpinBox()
+        self.iso.setRange(0.0001, 10.0)
+        self.iso.setDecimals(4)
+        self.iso.setSingleStep(0.005)
+        self.iso.setValue(viewport.isovalue)
+        self.iso.valueChanged.connect(lambda v: viewport.set_isosurface(isovalue=v))
+        layout.addRow("Isovalue (±):", self.iso)
+
+        self.opacity = QSlider(Qt.Orientation.Horizontal)
+        self.opacity.setRange(10, 100)
+        self.opacity.setValue(int(viewport.style.surface_opacity * 100))
+        self.opacity.valueChanged.connect(
+            lambda v: viewport.set_isosurface(opacity=v / 100.0))
+        layout.addRow("Opacity:", self.opacity)
+
+        self.palette_box = QComboBox()
+        for name, _pos, _neg in SURFACE_PALETTES:
+            self.palette_box.addItem(name)
+        current = (viewport.style.surface_positive, viewport.style.surface_negative)
+        match = next((i for i, (_, pos, neg) in enumerate(SURFACE_PALETTES)
+                      if self._rgb_close(pos, current[0])
+                      and self._rgb_close(neg, current[1])), None)
+        if match is None:
+            self._select_custom_entry()
+        else:
+            self.palette_box.setCurrentIndex(match)
+        self.palette_box.currentIndexChanged.connect(self._palette_chosen)
+        layout.addRow("Colors:", self.palette_box)
+
+        self.pos_btn = QPushButton()
+        self.neg_btn = QPushButton()
+        for btn, tip in ((self.pos_btn, "+ lobe"), (self.neg_btn, "− lobe")):
+            btn.setFixedSize(56, 22)
+            btn.setToolTip(f"{tip} color — click to pick any color (RGB or HEX)")
+        self.pos_btn.clicked.connect(lambda: self._pick_color(positive=True))
+        self.neg_btn.clicked.connect(lambda: self._pick_color(positive=False))
+        swatches = QWidget()
+        row = QHBoxLayout(swatches)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.pos_btn)
+        row.addWidget(self.neg_btn)
+        row.addStretch()
+        layout.addRow("Lobes (+ / −):", swatches)
+        self._refresh_swatches()
+
+        self.visible = QCheckBox("Show surface")
+        self.visible.setChecked(viewport.surface_visible)
+        self.visible.toggled.connect(lambda on: viewport.set_isosurface(visible=on))
+        layout.addRow(self.visible)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.close)
+        buttons.clicked.connect(self.close)
+        layout.addRow(buttons)
+
+    def _switch_volume(self, index: int):
+        self.viewport.set_volume(self.volumes[index], isovalue=self.iso.value())
+
+    # ------------------------------------------------------------------ colors
+
+    @staticmethod
+    def _rgb_close(a: tuple, b: tuple) -> bool:
+        return max(abs(x - y) for x, y in zip(a, b)) < 1e-3
+
+    def _refresh_swatches(self):
+        for btn, rgb in ((self.pos_btn, self.viewport.style.surface_positive),
+                         (self.neg_btn, self.viewport.style.surface_negative)):
+            btn.setStyleSheet(
+                f"background-color: {QColor.fromRgbF(*rgb).name()}; "
+                "border: 1px solid #888; border-radius: 3px;")
+
+    def _palette_chosen(self, index: int):
+        if index >= len(SURFACE_PALETTES):      # the "Custom" row
+            return
+        _, pos, neg = SURFACE_PALETTES[index]
+        self.viewport.set_isosurface(positive_color=pos, negative_color=neg)
+        self._refresh_swatches()
+
+    def _pick_color(self, positive: bool):
+        style = self.viewport.style
+        rgb = style.surface_positive if positive else style.surface_negative
+        color = QColorDialog.getColor(QColor.fromRgbF(*rgb), self,
+                                      "Isosurface color")
+        if not color.isValid():
+            return
+        chosen = (color.redF(), color.greenF(), color.blueF())
+        if positive:
+            self.viewport.set_isosurface(positive_color=chosen)
+        else:
+            self.viewport.set_isosurface(negative_color=chosen)
+        self.palette_box.blockSignals(True)
+        self._select_custom_entry()
+        self.palette_box.blockSignals(False)
+        self._refresh_swatches()
+
+    def _select_custom_entry(self):
+        if self.palette_box.findText("Custom") < 0:
+            self.palette_box.addItem("Custom")
+        self.palette_box.setCurrentIndex(self.palette_box.findText("Custom"))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("microscp")
         self.result: ParseResult | None = None
         self.current_frame = 0
+        self._surface_dialog: SurfaceDialog | None = None
 
         self.viewport = MoleculeViewport(self)
         self.setCentralWidget(self.viewport)
@@ -170,6 +326,26 @@ class MainWindow(QMainWindow):
         self._add_action(view_menu, "&Reset View", "Ctrl+R", self.viewport.reset_view)
         view_menu.addSeparator()
 
+        repr_menu = view_menu.addMenu("Re&presentation")
+        repr_group = QActionGroup(self)
+        self._repr_actions = {}
+        for name, text in (("cylview", "&CYLview"), ("houk", "&Houk (Houkmol)")):
+            action = QAction(text, self, checkable=True)
+            action.triggered.connect(lambda _=False, n=name: self._set_representation(n))
+            repr_group.addAction(action)
+            repr_menu.addAction(action)
+            self._repr_actions[name] = action
+        self._repr_actions["cylview"].setChecked(True)
+        self._add_action(repr_menu, "&Toggle Representation", "V",
+                         self._toggle_representation)
+        repr_menu.addSeparator()
+        for rep, text, key in ((REP_BALL, "Selection → &Ball && Stick", "1"),
+                               (REP_STICK, "Selection → &Stick", "2"),
+                               (REP_LINE, "Selection → &Line", "3")):
+            # swallow QAction.triggered's checked argument (it would land in r)
+            self._add_action(repr_menu, text, key,
+                             lambda _=False, r=rep: self._apply_atom_rep(r))
+
         labels_menu = view_menu.addMenu("Atom &Labels")
         group = QActionGroup(self)
         self._label_actions = {}
@@ -189,6 +365,7 @@ class MainWindow(QMainWindow):
         self._hbond_action.setShortcut(QKeySequence("H"))
         self._hbond_action.toggled.connect(self._toggle_hbonds)
         view_menu.addAction(self._hbond_action)
+        self._add_action(view_menu, "&Isosurface…", "I", self._show_surface_dialog)
 
         view_menu.addSeparator()
         self._add_action(view_menu, "&Align View to Selection", "A", self._align_view)
@@ -265,10 +442,18 @@ class MainWindow(QMainWindow):
         self.result = result
         self.current_frame = result.nframes - 1
         self._edited = False
+        if self._surface_dialog is not None:
+            self._surface_dialog.close()
+            self._surface_dialog = None
         mol = result.frames[self.current_frame]
         self.viewport.set_molecule(mol)
         self.viewport.clear_history()
         self.spectra_dock.set_result(result)
+        if result.volumes:
+            self.viewport.set_volume(result.volumes[0])
+            self.statusBar().showMessage(
+                f"Isosurface shown at ±{self.viewport.isovalue:g} — press I to adjust",
+                6000)
         name = Path(path).name
         self.setWindowTitle(f"microscp — {name}")
         info = f"{name}  ·  {mol.formula()}  ·  {mol.natoms} atoms  ·  {result.program}"
@@ -328,17 +513,31 @@ class MainWindow(QMainWindow):
         dialog = ExportImageDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export image", "molecule.png",
-                                              "PNG image (*.png)")
+        path, chosen = QFileDialog.getSaveFileName(self, "Export image",
+                                                   "molecule.png", EXPORT_FILTER)
         if not path:
             return
+        if not Path(path).suffix:
+            for name, ext in _EXPORT_DEFAULT_EXT.items():
+                if chosen.startswith(name):
+                    path += ext
+                    break
         scale = dialog.scale.value()
+        vp = self.viewport
         try:
+            volume = vp.volume if (vp.has_volume and vp.surface_visible) else None
             image = render_molecule_image(
-                self.viewport.molecule, self.viewport.style, self.viewport.camera,
-                self.viewport.width() * scale, self.viewport.height() * scale,
-                supersample=2, transparent=dialog.transparent.isChecked())
-            image.save(path)
+                vp.molecule, vp.style, vp.camera,
+                vp.width() * scale, vp.height() * scale,
+                supersample=2, transparent=dialog.transparent.isChecked(),
+                volume=volume, isovalue=vp.isovalue, reps=vp.atom_reps)
+            if dialog.annotations.isChecked() and (vp.pinned or vp.label_mode != "none"):
+                painter = QPainter(image)
+                draw_annotations(painter, vp.molecule, vp.camera,
+                                 image.width(), image.height(),
+                                 vp.pinned, vp.label_mode, scale=scale)
+                painter.end()
+            _write_image(image, path)
             self.statusBar().showMessage(f"Exported {path}", 5000)
         except Exception as exc:
             QMessageBox.critical(self, "Export failed", str(exc))
@@ -407,12 +606,48 @@ class MainWindow(QMainWindow):
             self._edited = True
             self._file_label.setText(self._file_label.text() + "  ·  ✎ edited")
 
+    def _set_representation(self, name: str):
+        self.viewport.set_representation(name)
+        self._repr_actions[name].setChecked(True)
+        label = "CYLview" if name == "cylview" else "Houk (Houkmol)"
+        self.statusBar().showMessage(f"Representation: {label}", 3000)
+
+    def _toggle_representation(self):
+        current = self.viewport.style.name
+        self._set_representation("houk" if current == "cylview" else "cylview")
+
+    def _apply_atom_rep(self, rep: int):
+        vp = self.viewport
+        if vp.molecule is None:
+            return
+        target = list(vp.selection)
+        vp.set_atom_representation(rep, target)
+        name = {REP_BALL: "ball & stick", REP_STICK: "stick", REP_LINE: "line"}[rep]
+        scope = f"{len(target)} selected atom(s)" if target else "all atoms"
+        self.statusBar().showMessage(f"Representation of {scope}: {name}", 3000)
+
     def _toggle_hbonds(self, checked: bool):
         self.viewport.style.show_hbonds = checked
         if self.viewport.molecule is not None:
             self.viewport._rebuild_scene()
         self.statusBar().showMessage(
             f"Hydrogen bonds {'shown' if checked else 'hidden'}", 3000)
+
+    def _show_surface_dialog(self):
+        if not self.viewport.has_volume:
+            self.statusBar().showMessage(
+                "No volumetric data — open a cube file (.cube/.cub) first", 4000)
+            return
+        if self._surface_dialog is None:
+            volumes = self.result.volumes if self.result else [self.viewport.volume]
+            self._surface_dialog = SurfaceDialog(self.viewport, volumes, self)
+            self._surface_dialog.finished.connect(self._surface_dialog_closed)
+        self._surface_dialog.show()
+        self._surface_dialog.raise_()
+        self._surface_dialog.activateWindow()
+
+    def _surface_dialog_closed(self):
+        self._surface_dialog = None
 
     def _toggle_spectra(self):
         if not self.spectra_dock.has_data:
@@ -433,7 +668,8 @@ class MainWindow(QMainWindow):
             "L cycles atom labels · A aligns view to selection (2=bond, 3=plane)<br>"
             "C centers rotation on the selected atom · Home re-centers the molecule<br>"
             "E adjusts the selected distance/angle/dihedral · X deletes atoms<br>"
-            "Ctrl+Z / Ctrl+Shift+Z undo/redo · S spectra · Space stops animation")
+            "Ctrl+Z / Ctrl+Shift+Z undo/redo · S spectra · Space stops animation<br>"
+            "I opens isosurface controls for cube files (MOs, densities)")
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

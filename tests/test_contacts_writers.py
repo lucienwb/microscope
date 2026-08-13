@@ -41,6 +41,46 @@ def test_hbond_dashes_in_scene():
     assert np.all(dashes[:, 6] < 0.1)                        # thinner than bonds
 
 
+def test_houk_style_scene():
+    from microscp.render.styles import make_style
+
+    mol = Molecule(["C", "H", "O"],
+                   np.array([[0.0, 0.0, 0.0], [1.05, 0.0, 0.0], [0.0, 1.25, 0.0]]))
+    mol.perceive_bonds()
+    houk = make_style("houk")
+    buf = build_scene(mol, houk)
+    # sphere rows carry the seam-line flag: heavy atoms yes, hydrogen no
+    assert buf.spheres.shape[1] == 8
+    np.testing.assert_allclose(buf.spheres[:, 7], [1.0, 0.0, 1.0])
+    # Houkmol bonds are uniformly black instead of split by atom color
+    nb = len(mol.bonds)
+    expected = np.tile(houk.bond_color, (nb, 1))
+    np.testing.assert_allclose(buf.cylinders[:nb, 7:10], expected, atol=1e-6)
+    np.testing.assert_allclose(buf.cylinders[:nb, 10:13], expected, atol=1e-6)
+    # the default style keeps split-color bonds and no seam lines
+    default = build_scene(mol, Style())
+    assert np.all(default.spheres[:, 7] == 0.0)
+    assert not np.allclose(default.cylinders[0, 7:10], default.cylinders[0, 10:13])
+
+
+def test_mixed_representations_scene():
+    from microscp.render.scene import LINE_RADIUS, REP_BALL, REP_LINE, REP_STICK
+
+    mol = Molecule(["C", "C", "C"],
+                   np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [3.0, 0.0, 0.0]]))
+    mol.perceive_bonds()
+    style = Style()
+    buf = build_scene(mol, style, reps=np.array([REP_BALL, REP_STICK, REP_LINE]))
+    # ball keeps the styled atom radius; stick shrinks to the bond radius;
+    # line shrinks to the wire radius
+    np.testing.assert_allclose(
+        buf.spheres[:, 3],
+        [style.atom_radius(6), style.bond_radius, LINE_RADIUS], atol=1e-6)
+    # a bond is drawn at the thinnest representation of its two atoms
+    np.testing.assert_allclose(buf.cylinders[:2, 6],
+                               [style.bond_radius, LINE_RADIUS], atol=1e-6)
+
+
 def test_orca_input_writer(tmp_path):
     mol = mio.load(DATA / "dvb_ir.out").molecule
     out = tmp_path / "job.inp"

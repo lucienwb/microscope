@@ -53,3 +53,68 @@ def test_water_bonds():
     bonds = mol.perceive_bonds()
     assert len(bonds) == 2
     assert mol.formula() == "H2O"
+
+
+def test_angle_arc_points():
+    a = np.array([1.5, 0.0, 0.0])
+    b = np.array([0.0, 0.0, 0.0])
+    c = np.array([0.0, 2.0, 0.0])
+    arc = geometry.angle_arc_points(a, b, c, radius=0.5, segments=16)
+    assert arc.shape == (17, 3)
+    # all points on the circle of radius 0.5 around the vertex, in the plane
+    np.testing.assert_allclose(np.linalg.norm(arc - b, axis=1), 0.5, atol=1e-12)
+    np.testing.assert_allclose(arc[:, 2], 0.0, atol=1e-12)
+    # endpoints aligned with the two arms
+    np.testing.assert_allclose(arc[0], [0.5, 0.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(arc[-1], [0.0, 0.5, 0.0], atol=1e-12)
+    # collinear atoms have no angle plane
+    assert geometry.angle_arc_points(a, b, -a).shape == (0, 3)
+
+
+def test_dihedral_arc_points():
+    t = np.radians(60.0)
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([0.0, 0.0, 0.0])
+    c = np.array([0.0, 0.0, 2.0])
+    d = np.array([np.cos(t), np.sin(t), 2.0])
+    arc = geometry.dihedral_arc_points(a, b, c, d, radius=0.4, segments=20)
+    assert arc.shape == (21, 3)
+    # arc sits at the central-bond midpoint, perpendicular to the bond
+    np.testing.assert_allclose(arc[:, 2], 1.0, atol=1e-12)
+    np.testing.assert_allclose(
+        np.linalg.norm(arc - [0.0, 0.0, 1.0], axis=1), 0.4, atol=1e-12)
+    # sweeps from the a side to the d side by the dihedral magnitude
+    np.testing.assert_allclose(arc[0], [0.4, 0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(arc[-1][:2], 0.4 * np.array([np.cos(t), np.sin(t)]),
+                               atol=1e-12)
+    swept = np.degrees(np.arccos(np.clip(
+        np.dot(arc[0] - [0, 0, 1.0], arc[-1] - [0, 0, 1.0]) / 0.16, -1, 1)))
+    assert abs(swept - abs(geometry.dihedral(a, b, c, d))) < 1e-9
+    # degenerate: outer atom on the bond axis / planar dihedral of 0
+    on_axis = np.array([0.0, 0.0, -1.0])
+    assert geometry.dihedral_arc_points(on_axis, b, c, d).shape == (0, 3)
+    assert geometry.dihedral_arc_points(a, b, c, a + [0, 0, 2.0]).shape == (0, 3)
+
+
+def test_dihedral_arm_points():
+    t = np.radians(60.0)
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([0.0, 0.0, 0.0])
+    c = np.array([0.0, 0.0, 2.0])
+    d = np.array([np.cos(t), np.sin(t), 2.0])
+    arms = geometry.dihedral_arm_points(a, b, c, d)
+    assert arms.shape == (2, 2, 3)
+    mid = np.array([0.0, 0.0, 1.0])
+    # both arms start at the bond midpoint and end at the in-plane
+    # projections of the outer atoms
+    np.testing.assert_allclose(arms[0][0], mid, atol=1e-12)
+    np.testing.assert_allclose(arms[1][0], mid, atol=1e-12)
+    np.testing.assert_allclose(arms[0][1], [1.0, 0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(arms[1][1], [np.cos(t), np.sin(t), 1.0], atol=1e-12)
+    # the arc endpoints lie on those arms
+    arc = geometry.dihedral_arc_points(a, b, c, d, radius=0.4)
+    np.testing.assert_allclose(arc[0], mid + 0.4 * (arms[0][1] - mid), atol=1e-12)
+    np.testing.assert_allclose(arc[-1], mid + 0.4 * (arms[1][1] - mid), atol=1e-12)
+    # degenerate input
+    on_axis = np.array([0.0, 0.0, -1.0])
+    assert geometry.dihedral_arm_points(on_axis, b, c, d).shape == (0, 2, 3)

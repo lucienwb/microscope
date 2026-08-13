@@ -43,6 +43,7 @@ class ParseResult:
     vibrations: list[Vibration] = field(default_factory=list)
     excited_states: list[ExcitedState] = field(default_factory=list)
     nmr_shieldings: list[NMRShielding] = field(default_factory=list)
+    volumes: list = field(default_factory=list)              # VolumeData grids
     normal_termination: bool | None = None
     extras: dict = field(default_factory=dict)
 

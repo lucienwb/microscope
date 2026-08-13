@@ -6,11 +6,11 @@ from pathlib import Path
 
 from ..core.molecule import Molecule
 from ..core.results import ParseResult
-from . import cclib_bridge, fchk, gaussian, molden, orca, pdbfile, qchem, xyz
+from . import cclib_bridge, cube, fchk, gaussian, molden, orca, pdbfile, qchem, xyz
 from .errors import FileFormatError, UnsupportedFormatError
 
 OPEN_EXTENSIONS = (".xyz", ".log", ".out", ".fchk", ".fck", ".fch",
-                   ".gjf", ".com", ".gau", ".pdb", ".molden")
+                   ".gjf", ".com", ".gau", ".pdb", ".molden", ".cube", ".cub")
 
 
 def _sniff_output_program(path: Path) -> str:
@@ -44,6 +44,8 @@ def load(path) -> ParseResult:
             return pdbfile.read(path)
         if ext == ".molden":
             return molden.read(path)
+        if ext in (".cube", ".cub"):
+            return cube.read(path)
         if ext in (".log", ".out"):
             program = _sniff_output_program(path)
             if program == "gaussian":

@@ -190,3 +190,68 @@ def test_molden():
     assert abs(result.vibrations[0].frequency - 1595.0) < 1e-6
     assert result.vibrations[0].ir_intensity == 65.0
     assert result.vibrations[0].displacements.shape == (3, 3)
+
+
+# ---------------------------------------------------------------------------
+# additional program versions / job types (fixtures also from cclib)
+
+
+@needs
+def test_gaussian09_unrestricted_cation():
+    result = gaussian.read_log(DATA / "g09_dvb_un_sp.log")
+    assert result.normal_termination
+    mol = result.molecule
+    assert mol.formula() == "C10H10"
+    assert (mol.charge, mol.multiplicity) == (1, 2)   # DVB radical cation
+    assert abs(result.scf_energies[-1] - (-382.081395204)) < 1e-8
+
+
+@needs
+def test_gaussian09_relaxed_scan_trajectory():
+    result = gaussian.read_log(DATA / "g09_dvb_scan.log")
+    assert result.normal_termination
+    assert result.nframes == 61                       # every scan opt step
+    assert len(result.scf_energies) == 61
+    assert abs(result.scf_energies[-1] - (-382.308259560)) < 1e-8
+    # geometries actually change along the scan
+    d0 = result.frames[0].coords
+    dN = result.frames[-1].coords
+    assert np.abs(d0 - dN).max() > 0.1
+
+
+@needs
+def test_gaussian09_transition_metal():
+    result = gaussian.read_log(DATA / "g09_mo4ocl4_sp.log")
+    mol = result.molecule
+    assert mol.formula() == "Cl4MoO"
+    assert (mol.charge, mol.multiplicity) == (-2, 1)
+    assert "Mo" in mol.symbols
+    assert abs(result.scf_energies[-1] - (-202.713622575)) < 1e-8
+
+
+@needs
+def test_orca5_opt():
+    result = orca.read_log(DATA / "orca5_dvb_gopt.out")
+    assert result.program == "ORCA"
+    assert result.normal_termination
+    assert result.molecule.formula() == "C10H10"
+    assert result.nframes == 4
+    assert abs(result.scf_energies[-1] - (-382.055133372796)) < 1e-9
+
+
+@needs
+def test_qchem6_solvent_sp():
+    result = qchem.read_log(DATA / "qchem6_water_smd.out")
+    assert result.program == "Q-Chem"
+    assert result.molecule.formula() == "H2O"
+    assert abs(result.scf_energies[-1] - (-74.9672988069)) < 1e-8
+
+
+@needs
+def test_fchk_unrestricted():
+    result = fchk.read(DATA / "dvb_un_sp.fchk")
+    mol = result.molecule
+    assert mol.formula() == "C10H10"
+    assert (mol.charge, mol.multiplicity) == (1, 2)
+    mol.perceive_bonds()
+    assert 20 <= len(mol.bonds) <= 22
