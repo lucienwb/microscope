@@ -4,12 +4,12 @@ from pathlib import Path
 
 import numpy as np
 
-import microscp.io as mio
-from microscp.core.contacts import find_hbonds
-from microscp.core.molecule import Molecule
-from microscp.io import orca, qchem
-from microscp.render.scene import build_scene
-from microscp.render.styles import Style
+import microscope.io as mio
+from microscope.core.contacts import find_hbonds
+from microscope.core.molecule import Molecule
+from microscope.io import orca, qchem
+from microscope.render.scene import build_scene
+from microscope.render.styles import Style
 
 DATA = Path(__file__).parent / "data"
 
@@ -42,7 +42,7 @@ def test_hbond_dashes_in_scene():
 
 
 def test_houk_style_scene():
-    from microscp.render.styles import make_style
+    from microscope.render.styles import make_style
 
     mol = Molecule(["C", "H", "O"],
                    np.array([[0.0, 0.0, 0.0], [1.05, 0.0, 0.0], [0.0, 1.25, 0.0]]))
@@ -64,7 +64,7 @@ def test_houk_style_scene():
 
 
 def test_mixed_representations_scene():
-    from microscp.render.scene import LINE_RADIUS, REP_BALL, REP_LINE, REP_STICK
+    from microscope.render.scene import LINE_RADIUS, REP_BALL, REP_LINE, REP_STICK
 
     mol = Molecule(["C", "C", "C"],
                    np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [3.0, 0.0, 0.0]]))

@@ -144,6 +144,56 @@ def set_dihedral(mol: Molecule, i: int, j: int, k: int, l: int, value: float,
     return result
 
 
+def translate_atoms(mol: Molecule, indices, delta) -> np.ndarray:
+    """Coordinates with *indices* shifted rigidly by the 3-vector *delta*."""
+    idx = _unique(indices)
+    if not idx:
+        raise EditError("no atoms to move")
+    coords = mol.coords.copy()
+    coords[idx] += np.asarray(delta, dtype=float)
+    return coords
+
+
+def rotate_atoms(mol: Molecule, indices, axis, angle_deg: float,
+                 pivot=None) -> np.ndarray:
+    """Coordinates with *indices* rotated about *axis* through *pivot*.
+
+    *pivot* defaults to the centroid of the moved atoms, which is what the
+    interactive manipulator wants (the selection turns in place).
+    """
+    idx = _unique(indices)
+    if not idx:
+        raise EditError("no atoms to rotate")
+    axis = np.asarray(axis, dtype=float)
+    if np.linalg.norm(axis) < 1e-9:
+        raise EditError("degenerate rotation axis")
+    coords = mol.coords.copy()
+    pivot = (coords[idx].mean(axis=0) if pivot is None
+             else np.asarray(pivot, dtype=float))
+    rot = rotation_matrix(axis, np.radians(angle_deg))
+    coords[idx] = (rot @ (coords[idx] - pivot).T).T + pivot
+    return coords
+
+
+def connected_fragment(bonds, seeds) -> list[int]:
+    """Every atom bonded, directly or indirectly, to any atom in *seeds*."""
+    adj = _adjacency(bonds)
+    seen: set[int] = set()
+    stack = [int(s) for s in seeds]
+    while stack:
+        a = stack.pop()
+        if a in seen:
+            continue
+        seen.add(a)
+        stack.extend(b for b in adj[a] if b not in seen)
+    return sorted(seen)
+
+
+def _unique(indices) -> list[int]:
+    """Indices without duplicates, order irrelevant (used as a fancy index)."""
+    return sorted({int(i) for i in indices})
+
+
 def delete_atoms(mol: Molecule, indices) -> Molecule:
     """New Molecule with *indices* removed; bonds are re-perceived."""
     drop = set(int(x) for x in indices)

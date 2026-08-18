@@ -14,7 +14,7 @@ from ..render.camera import OrthoCamera, orientation_along, orientation_from_pla
 from ..render.glrenderer import MoleculeRenderer
 from ..render.scene import build_scene, build_surface_meshes
 from ..render.styles import Style, make_style
-from . import annotations
+from . import annotations, gizmo
 
 _MARKER_COLOR = QColor(235, 130, 20)
 _LINE_COLOR = QColor(60, 60, 60)
@@ -47,6 +47,17 @@ class MoleculeViewport(QOpenGLWidget):
         self._last_pos = None
         self._press_pos = None
         self._overlay_ok = True
+        self.show_gizmo = True          # manipulator on the current selection
+        self.show_axes = False          # world orientation triad in the corner
+        self._gizmo_hover = None
+        self._gizmo_drag = None         # handle being dragged
+        self._drag_base = None          # coords when the drag started
+        self._drag_snapshot = None
+        self._drag_origin = None        # gizmo centre at drag start (world)
+        self._drag_start_px = None
+        self._drag_angle = 0.0          # accumulated rotation, degrees
+        self._drag_last_angle = 0.0     # last screen angle, radians
+        self._drag_moved = False
         self._anim_timer: QTimer | None = None
         self._anim_base = None
         self._anim_disp = None
@@ -54,6 +65,7 @@ class MoleculeViewport(QOpenGLWidget):
         self._undo_stack: list[tuple] = []
         self._redo_stack: list[tuple] = []
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)     # so gizmo handles light up on hover
         self.setMinimumSize(400, 300)
 
     # ------------------------------------------------------------------ data
@@ -348,6 +360,122 @@ class MoleculeViewport(QOpenGLWidget):
             self.molecule.perceive_bonds()
             self._rebuild_scene()
 
+    def select_fragment(self) -> int:
+        """Grow the selection to every atom connected to it (a whole group).
+
+        The manipulator moves exactly what is selected, so this is how a
+        substituent or a ligand gets picked up in one click.
+        """
+        if self.molecule is None or not self.selection:
+            return 0
+        if self.molecule.bonds is None:
+            self.molecule.perceive_bonds()
+        self.selection = editing.connected_fragment(self.molecule.bonds,
+                                                    self.selection)
+        self.selectionChanged.emit(self.measurement_text())
+        self.update()
+        return len(self.selection)
+
+    # ------------------------------------------------------------------ manipulator
+
+    @property
+    def gizmo_visible(self) -> bool:
+        return bool(self.show_gizmo and self.molecule is not None and self.selection)
+
+    def set_show_gizmo(self, on: bool) -> None:
+        self.show_gizmo = bool(on)
+        self._gizmo_hover = None
+        self.update()
+
+    def set_show_axes(self, on: bool) -> None:
+        self.show_axes = bool(on)
+        self.update()
+
+    def _gizmo_center(self):
+        if not self.gizmo_visible:
+            return None
+        return gizmo.selection_center(self.molecule.coords, self.selection)
+
+    def _gizmo_hit(self, pos):
+        center = self._gizmo_center()
+        if center is None:
+            return None
+        return gizmo.hit_test(self.camera, self.width(), self.height(), center,
+                              (pos.x(), pos.y()))
+
+    def _begin_gizmo_drag(self, handle, pos) -> None:
+        self.stop_animation()
+        self._gizmo_drag = handle
+        self._drag_snapshot = self.snapshot()
+        self._drag_base = self.molecule.coords.copy()
+        self._drag_origin = self._gizmo_center()
+        self._drag_start_px = np.array([pos.x(), pos.y()], dtype=float)
+        self._drag_angle = 0.0
+        self._drag_moved = False
+        if handle[0] == "ring":
+            self._drag_last_angle = gizmo.screen_angle(
+                self.camera, self.width(), self.height(), self._drag_origin,
+                self._drag_start_px)
+
+    def _update_gizmo_drag(self, pos, snap: bool) -> None:
+        kind, k = self._gizmo_drag
+        px = np.array([pos.x(), pos.y()], dtype=float)
+        w, h = self.width(), self.height()
+        mol = self.molecule
+        mol.coords = self._drag_base            # transforms read from the base
+        try:
+            if kind == "ring":
+                ang = gizmo.screen_angle(self.camera, w, h, self._drag_origin, px)
+                step = gizmo.wrap_angle(ang - self._drag_last_angle)
+                self._drag_last_angle = ang
+                self._drag_angle += np.degrees(step) * gizmo.rotation_sign(
+                    self.camera, k)
+                value = self._drag_angle
+                if snap:
+                    value = round(value / 15.0) * 15.0
+                coords = editing.rotate_atoms(mol, self.selection,
+                                              gizmo.AXIS_VECTORS[k], value,
+                                              pivot=self._drag_origin)
+                self._drag_moved = abs(value) > 1e-9
+                message = f"rotate {gizmo.AXIS_NAMES[k]} {value:+.1f}°"
+            else:
+                if kind == "center":
+                    delta = gizmo.plane_translation(self.camera, h,
+                                                    px - self._drag_start_px)
+                else:
+                    t = gizmo.axis_translation(self.camera, w, h,
+                                               self._drag_origin, k,
+                                               px - self._drag_start_px)
+                    if snap:
+                        t = round(t / 0.1) * 0.1
+                    delta = gizmo.AXIS_VECTORS[k] * t
+                coords = editing.translate_atoms(mol, self.selection, delta)
+                self._drag_moved = bool(np.linalg.norm(delta) > 1e-9)
+                message = ("move " + ("in view plane" if kind == "center"
+                                      else gizmo.AXIS_NAMES[k])
+                           + f" {np.linalg.norm(delta):.3f} Å")
+        except editing.EditError:
+            mol.coords = self._drag_base.copy()
+            return
+        mol.coords = coords
+        self._rebuild_scene()
+        self.selectionChanged.emit(
+            f"{len(self.selection)} atom(s): {message}"
+            if len(self.selection) > 4 else
+            f"{self.measurement_text()}  ·  {message}")
+
+    def _end_gizmo_drag(self) -> None:
+        if self._drag_moved and self._drag_snapshot is not None:
+            self._push_undo(self._drag_snapshot)
+        self._gizmo_drag = None
+        self._drag_base = None
+        self._drag_snapshot = None
+        self._drag_origin = None
+        self._drag_start_px = None
+        self._drag_moved = False
+        self.selectionChanged.emit(self.measurement_text())
+        self.update()
+
     # ------------------------------------------------------------------ view helpers
 
     def center_on_selection(self) -> bool:
@@ -414,7 +542,8 @@ class MoleculeViewport(QOpenGLWidget):
         self._renderer.set_style_params(self.style.quadrant_color,
                                         self.style.quadrant_width)
         self._renderer.draw(view, proj, w, h, background=(*self.style.background, 1.0))
-        overlay_needed = bool(self.selection or self.pinned or self.label_mode != "none")
+        overlay_needed = bool(self.selection or self.pinned or self.show_axes
+                              or self.label_mode != "none")
         if overlay_needed and self._overlay_ok:
             try:
                 self._draw_overlay()
@@ -430,6 +559,9 @@ class MoleculeViewport(QOpenGLWidget):
         w, h = self.width(), self.height()
         pts = self.camera.project(mol.coords, w, h)
         m = annotations.overlay_metrics(h, self.camera.half_height)
+
+        if self.show_axes:
+            annotations.draw_axis_indicator(painter, self.camera, w, h)
 
         if self.label_mode != "none":
             annotations.draw_atom_labels(painter, mol, pts, m, self.label_mode)
@@ -455,6 +587,10 @@ class MoleculeViewport(QOpenGLWidget):
                 font.setPointSize(11)   # HUD text: fixed, screen-anchored
                 painter.setFont(font)
                 annotations.draw_halo_text(painter, 12, h - 14, text)
+
+        if self.gizmo_visible:
+            gizmo.draw(painter, self.camera, w, h, self._gizmo_center(),
+                       hovered=self._gizmo_hover, active=self._gizmo_drag)
         painter.end()
 
     # ------------------------------------------------------------------ input
@@ -462,11 +598,28 @@ class MoleculeViewport(QOpenGLWidget):
     def mousePressEvent(self, event):
         self._press_pos = event.position()
         self._last_pos = event.position()
+        if event.button() == Qt.MouseButton.LeftButton and self.gizmo_visible:
+            handle = self._gizmo_hit(event.position())
+            if handle is not None:
+                self._begin_gizmo_drag(handle, event.position())
+                self.update()
 
     def mouseMoveEvent(self, event):
+        pos = event.position()
+        if self._gizmo_drag is not None:
+            self._update_gizmo_drag(
+                pos, bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+            self._last_pos = pos
+            self.update()
+            return
+        if not event.buttons():                     # hover: light up a handle
+            hover = self._gizmo_hit(pos) if self.gizmo_visible else None
+            if hover != self._gizmo_hover:
+                self._gizmo_hover = hover
+                self.update()
+            return
         if self._last_pos is None:
             return
-        pos = event.position()
         dx = pos.x() - self._last_pos.x()
         dy = pos.y() - self._last_pos.y()
         if event.buttons() & Qt.MouseButton.LeftButton:
@@ -477,7 +630,9 @@ class MoleculeViewport(QOpenGLWidget):
         self.update()
 
     def mouseReleaseEvent(self, event):
-        if (self._press_pos is not None
+        if self._gizmo_drag is not None:
+            self._end_gizmo_drag()
+        elif (self._press_pos is not None
                 and event.button() == Qt.MouseButton.LeftButton
                 and (event.position() - self._press_pos).manhattanLength() < 4
                 and self.molecule is not None):

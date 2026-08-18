@@ -1,15 +1,15 @@
-# microscp
+# microscope
 
-**microscp** (from *Microscope*) is a cross-platform molecular **structure and
+**microscope** is a cross-platform molecular **structure and
 spectroscopy viewer** for quantum chemistry, with CYLview-style
-publication-quality rendering.
+publication-quality rendering. It installs the short command `scope`.
 
 It reads the everyday files of computational chemistry — Gaussian, ORCA and
 Q-Chem outputs, `xyz`, `pdb`, `fchk`, Molden — and turns them into clean 3D
 structures, interactive IR/UV-Vis/NMR spectra, editable geometries, and
 figures ready for a paper.
 
-![tryptophan rendered by microscp](docs/screenshot_trp.png)
+![tryptophan rendered by microscope](docs/screenshot_trp.png)
 
 ## Highlights
 
@@ -30,11 +30,18 @@ figures ready for a paper.
 - **Orbital & density isosurfaces** — open a cube file and the surface appears,
   with live isovalue/opacity/color controls (in-house marching-tetrahedra
   mesher; preset color pairs or any custom RGB/HEX color)
+- **Drag to move and rotate** — select an atom or a whole fragment and a
+  manipulator appears on it: coloured X/Y/Z arrows slide it, three rings turn
+  it, the centre dot moves it in the screen plane (hold Shift to snap to
+  0.1 Å / 15°). Everything is undoable
 - **Measure & edit** — publication-style measurement annotations (distance
   written along the bond, angles marked with an arc, dihedrals with a
   rotation arrow around the central bond); fragment-aware geometry
   adjustment with live preview and undo/redo
 - **Trajectories** — optimization/IRC/scan playback with energies
+- **Batch figures from the shell** — `scope -s mycalc.log --style houk
+  --view 30,-15 -o fig.png` renders without opening a window, so figures
+  regenerate from a script like a gnuplot plot
 - **Scriptable** — the same parsers and writers work headless from Python
 
 ## Install
@@ -42,13 +49,13 @@ figures ready for a paper.
 Runs anywhere Python 3.10+ runs (Windows, macOS, Linux):
 
 ```bash
-git clone https://github.com/lucienwb/microscp
-cd microscp
-conda create -n microscp python=3.12   # or any venv
-conda activate microscp
+git clone https://github.com/lucienwb/microscope
+cd microscope
+conda create -n microscope python=3.12   # or any venv
+conda activate microscope
 pip install -e .
 
-microscp mycalc.log                    # done
+scope mycalc.log                         # done
 ```
 
 Dependencies are deliberately minimal and pip-installable everywhere:
@@ -59,9 +66,49 @@ automatically as a fallback for formats the native parsers do not cover.
 ## Usage
 
 ```bash
-microscp                 # open the GUI
-microscp mycalc.log      # open a file directly
+scope                 # open the GUI
+scope mycalc.log      # open a file directly
+scope -s mycalc.log   # no window: render mycalc.png and exit
 ```
+
+### Making figures from the command line
+
+`-s`/`--silent` turns Microscope into a batch plotter, the way `gnuplot` makes
+a plot from a script: no window opens, the figure is written and the command
+returns. Put the line in a shell script or a Makefile and every figure
+regenerates itself after a re-optimization.
+
+```bash
+scope -s opt.log -o fig.tif --style houk --size 2000x1500
+scope -s mol.xyz --view top --labels number --measure 3,4
+scope -s mol.log --rep '1-12:ball;13-40:line' --view 30,-15 --axes
+scope -s homo.cube --iso 0.03 --iso-colors purple,gold --zoom 1.3
+scope -s scan.log --frame 12 --align 3,4 -o frame12.png
+```
+
+Output is a transparent PNG (or uncompressed TIFF) named after the input
+unless `-o` says otherwise; `--opaque` fills the background instead. Atom
+numbers are 1-based, exactly as the viewer labels them. `scope --help` lists
+every flag — style, representations, labels, view/rotation/alignment, zoom,
+size, supersampling, measurements, cube isosurfaces and colours.
+
+`--ir`, `--uv` and `--nmr` plot the spectrum instead of the molecule, with the
+same broadening and axes as the spectra dock — and vector output for journals:
+
+```bash
+scope -s freq.log --ir -o ir.pdf --fwhm 12 --freq-scale 0.965
+scope -s freq.log --ir --xrange 600:1800 --title 'fingerprint region'
+scope -s td.log   --uv --unit eV --xrange 2:7 -o uv.svg
+scope -s nmr.log  --nmr --nucleus C --reference 186.4 --csv shifts.csv
+```
+
+IR and δ axes run high → low as spectra are conventionally drawn, sticks sit
+under the broadened curve (`--no-sticks` drops them), UV-Vis oscillator
+strengths get their own right-hand axis, and `--csv` writes the plotted curve
+as data. Figures go to PNG, PDF, SVG, EPS or TIFF at `--dpi` (300 by default).
+
+`--style`, `--labels` and `--axes` also work without `-s`, to open the viewer
+already set up that way; the render-only flags refuse to run silently ignored.
 
 - **Rotate**: left-drag &nbsp;·&nbsp; **Pan**: right-drag &nbsp;·&nbsp; **Zoom**: scroll
 - **Representation**: `V` toggles between the CYLview look and the Houk
@@ -77,6 +124,17 @@ microscp mycalc.log      # open a file directly
   with a rotation arrow around the central bond (Newman-style); larger
   selections just show the atom count, ready for region operations like
   `1`/`2`/`3`
+- **Move & rotate by hand**: a manipulator sits on whatever is selected —
+  drag the red/green/blue **arrows** to slide it along x/y/z, the matching
+  **rings** to turn it about that axis, or the **centre dot** to move it in
+  the screen plane; hold `Shift` to snap to 0.1 Å / 15°. `F` first grows the
+  selection to the whole connected fragment, so a substituent or ligand is
+  picked up in one keystroke. `G` hides the handles when they are in the way
+
+![the move/rotate manipulator and the XYZ axis indicator](docs/screenshot_gizmo.png)
+
+- **XYZ axes**: `Shift+A` shows a corner triad of the world axes (View → Show
+  XYZ Axes); it is included in exported images too
 - **Pin measurements**: `M` keeps the current measurement displayed in the scene (several at once; `Shift+M` clears)
 - **Atom labels**: `L` cycles element / element+number / number (View → Atom Labels)
 - **Align view**: `A` with 2 atoms selected looks down the bond; with 3 atoms selected puts their plane in the screen (GaussView-style)
@@ -95,8 +153,8 @@ microscp mycalc.log      # open a file directly
 
 ![orbital isosurface from a cube file](docs/screenshot_isosurface.png)
 - **Export**: File → Export Image… for high-resolution figures — transparent
-  PNG or uncompressed TIFF — with isosurfaces, atom labels and pinned
-  measurements included
+  PNG or uncompressed TIFF — with isosurfaces, atom labels, pinned
+  measurements and the XYZ axes included
 - **Save**: File → Save As… to write `xyz`, Gaussian input (`.gjf`), or `pdb` — including edited structures
 
 ![labels, pinned measurements and plane alignment](docs/screenshot_features.png)
@@ -156,7 +214,7 @@ Every spectrum exports as CSV (data) or PNG/SVG/PDF (figure) for publications.
 Everything the GUI does with files is scriptable:
 
 ```python
-import microscp.io as mio
+import microscope.io as mio
 
 result = mio.load("mycalc.log")            # any supported format
 mol = result.molecule                       # final geometry

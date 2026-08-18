@@ -16,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 
-import microscp.io as mio  # noqa: E402
-from microscp.core.molecule import Molecule  # noqa: E402
-from microscp.render.camera import OrthoCamera  # noqa: E402
-from microscp.render.offscreen import render_molecule_image  # noqa: E402
-from microscp.render.styles import make_style  # noqa: E402
+import microscope.io as mio  # noqa: E402
+from microscope.core.molecule import Molecule  # noqa: E402
+from microscope.render.camera import OrthoCamera  # noqa: E402
+from microscope.render.offscreen import render_molecule_image  # noqa: E402
+from microscope.render.styles import make_style  # noqa: E402
 
 
 def benzene() -> Molecule:

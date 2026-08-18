@@ -1,12 +1,12 @@
-"""microscp Python API demo: parse Gaussian outputs and use the results.
+"""microscope Python API demo: parse Gaussian outputs and use the results.
 
 Run from the repo root:  python examples/api_demo.py
 """
 
 from pathlib import Path
 
-import microscp.io as mio
-from microscp.core import geometry
+import microscope.io as mio
+from microscope.core import geometry
 
 DATA = Path(__file__).resolve().parents[1] / "tests" / "data"
 

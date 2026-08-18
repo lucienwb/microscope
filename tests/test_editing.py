@@ -5,8 +5,8 @@ import math
 import numpy as np
 import pytest
 
-from microscp.core import editing, geometry
-from microscp.core.molecule import Molecule
+from microscope.core import editing, geometry
+from microscope.core.molecule import Molecule
 
 
 def ethane() -> Molecule:

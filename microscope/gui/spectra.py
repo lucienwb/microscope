@@ -17,10 +17,8 @@ from PySide6.QtWidgets import (
 
 from ..core.results import ParseResult
 from ..spectra import ir_spectrum, nmr_spectrum, uvvis_spectrum
-
-_CURVE = "#303030"
-_STICK = "#9a9a9a"
-_ACTIVE = "#e08214"
+from ..spectra.plot import ACTIVE_COLOR as _ACTIVE
+from ..spectra.plot import draw_spectrum
 
 
 class _SpectrumTab(QWidget):
@@ -72,14 +70,6 @@ class _SpectrumTab(QWidget):
         if path:
             self.figure.savefig(path, dpi=300)
 
-    def _style_axes(self, spec):
-        self.ax.set_xlabel(spec.xlabel)
-        self.ax.set_ylabel(spec.ylabel)
-        if spec.invert_x:
-            self.ax.set_xlim(float(spec.x.max()), float(spec.x.min()))
-        for side in ("top", "right"):
-            self.ax.spines[side].set_visible(False)
-
 
 class IRTab(_SpectrumTab):
     def __init__(self, vibrations, viewport, parent=None):
@@ -114,8 +104,7 @@ class IRTab(_SpectrumTab):
         spec = self._spec
         self.ax.clear()
         top = float(spec.y.max()) or 1.0
-        self.ax.vlines(spec.stick_x, 0.0, spec.stick_y, color=_STICK, lw=1.0)
-        self.ax.plot(spec.x, spec.y, color=_CURVE, lw=1.3)
+        draw_spectrum(self.ax, spec)
         if self._active_index is not None:
             k = self._active_index
             self.ax.vlines([spec.stick_x[k]], 0.0, [max(spec.stick_y[k], 0.05 * top)],
@@ -124,7 +113,6 @@ class IRTab(_SpectrumTab):
                              (spec.stick_x[k], max(spec.stick_y[k], 0.05 * top)),
                              textcoords="offset points", xytext=(4, 4),
                              color=_ACTIVE, fontsize=9)
-        self._style_axes(spec)
         self.canvas.draw_idle()
 
     def _on_click(self, event):
@@ -181,13 +169,8 @@ class UVVisTab(_SpectrumTab):
         spec = self._spec
         self.ax.clear()
         self.ax2.clear()
-        self.ax2.vlines(spec.stick_x, 0.0, spec.stick_y, color=_STICK, lw=1.0)
-        self.ax2.set_ylabel("oscillator strength f", color=_STICK)
-        self.ax2.tick_params(axis="y", labelcolor=_STICK)
-        self.ax2.set_ylim(bottom=0.0)
-        self.ax.plot(spec.x, spec.y, color=_CURVE, lw=1.3)
-        self.ax.set_ylim(bottom=0.0)
-        self._style_axes(spec)
+        draw_spectrum(self.ax, spec, stick_axis=self.ax2,
+                      stick_label="oscillator strength f")
         self.canvas.draw_idle()
 
 
@@ -230,10 +213,7 @@ class NMRTab(_SpectrumTab):
             return
         spec = self._spec
         self.ax.clear()
-        self.ax.vlines(spec.stick_x, 0.0, spec.stick_y, color=_STICK, lw=1.0)
-        self.ax.plot(spec.x, spec.y, color=_CURVE, lw=1.3)
-        self.ax.set_ylim(bottom=0.0)
-        self._style_axes(spec)
+        draw_spectrum(self.ax, spec)
         self.canvas.draw_idle()
 
 

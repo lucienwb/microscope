@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from microscp.core import elements, geometry
-from microscp.core.molecule import Molecule
+from microscope.core import elements, geometry
+from microscope.core.molecule import Molecule
 
 
 def test_normalize_symbol():
@@ -24,7 +24,7 @@ def test_measurements():
 
 
 def test_orientation_helpers():
-    from microscp.render.camera import orientation_along, orientation_from_plane
+    from microscope.render.camera import orientation_along, orientation_from_plane
 
     rot = orientation_along(np.array([1.0, 2.0, 3.0]))
     np.testing.assert_allclose(rot @ rot.T, np.eye(3), atol=1e-12)

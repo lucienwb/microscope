@@ -5,13 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import microscp.io as mio
-from microscp.core.isosurface import isosurface_mesh, marching_tetrahedra
-from microscp.core.volume import VolumeData
-from microscp.io import cube
-from microscp.io.errors import FileFormatError
-from microscp.render.scene import build_surface_meshes
-from microscp.render.styles import Style
+import microscope.io as mio
+from microscope.core.isosurface import isosurface_mesh, marching_tetrahedra
+from microscope.core.volume import VolumeData
+from microscope.io import cube
+from microscope.io.errors import FileFormatError
+from microscope.render.scene import build_surface_meshes
+from microscope.render.styles import Style
 
 DATA = Path(__file__).parent / "data"
 BOHR = 0.52917721092

@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Spectra from the command line: `scope -s file.log --ir/--uv/--nmr` plots the
+  spectrum instead of the molecule, to PNG/PDF/SVG/EPS/TIFF at `--dpi`, with
+  `--fwhm`, `--freq-scale`, `--unit nm|eV`, `--nucleus`, `--reference`,
+  `--xrange`, `--no-sticks`, `--title` and `--csv` (writes the plotted curve
+  as data). The drawing code is shared with the spectra dock, so batch figures
+  match the screen; the UV-Vis oscillator-strength label now stays on the
+  right-hand axis after a redraw
+- Silent mode: `scope -s file.log …` renders a figure straight to PNG/TIFF
+  without opening a window, so figures can be regenerated from a shell script
+  or Makefile the way gnuplot makes a plot. Flags cover style, per-range
+  representations, labels, view (named orientations, screen-axis angles,
+  `--align` down a bond or plane), zoom, size, supersampling, background and
+  bond colours, measurements, the XYZ axes, cube isosurfaces with level,
+  opacity and lobe colours, and trajectory frame selection. Atom numbers are
+  1-based as in the viewer, and `--style`/`--labels`/`--axes` also work
+  without `-s` to open the viewer already configured
+- Interactive move/rotate manipulator on the selection (LightCone-style):
+  coloured X/Y/Z arrows translate it, three rings rotate it about the
+  corresponding axis, and a centre dot moves it in the screen plane. Handles
+  light up on hover, `Shift` snaps to 0.1 Å / 15°, every drag is a single
+  undo step, and `G` (Edit → Show Move/Rotate Handles) turns them off
+- `F` grows the selection to the whole connected fragment, so a substituent
+  or ligand can be grabbed and moved in one go
+- `Shift+A` (View → Show XYZ Axes) shows a corner triad of the world axes,
+  faded for axes pointing away from the viewer; exported images include it
+- **Renamed**: the project, distribution and import package are now
+  `microscope` (was `microscp`), and the console command is now the shorter
+  `scope` (was `microscp`). Update existing installs with a fresh
+  `pip install -e .`; `import microscp` becomes `import microscope`
 - Houk (Houkmol) style: the classic Houk-group figure look — glossy
   ball-and-stick with black bonds, near-white carbons and two black
   great-circle "quadrant" seam lines on every heavy atom (they rotate with
@@ -35,7 +64,7 @@
   `I` opens live isovalue/opacity/MO controls; also available headless via
   `render_molecule_image(..., volume=...)` and `scripts/preview.py`
 - ORCA (`.inp`) and Q-Chem (`.in`/`.qcin`) input writers, available from
-  File → Save As and `microscp.io.save_molecule`
+  File → Save As and `microscope.io.save_molecule`
 - Hydrogen bonds drawn as CYLview-style dashed lines (D–H···A criteria:
   H···A ≤ 2.6 Å, angle ≥ 120°); toggle with `H`
 - Save dialog appends the correct extension when none is typed

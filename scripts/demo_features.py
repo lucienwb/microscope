@@ -23,7 +23,7 @@ from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QSurfaceFormat  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from microscp.gui.app import MainWindow  # noqa: E402
+from microscope.gui.app import MainWindow  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "tests" / "data" / "dvb_ir.out"
 

@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import microscp.io as mio
-from microscp.io import fchk, gaussian, molden, orca, qchem
+import microscope.io as mio
+from microscope.io import fchk, gaussian, molden, orca, qchem
 
 DATA = Path(__file__).parent / "data"
 
@@ -70,7 +70,7 @@ def test_gaussian_input_roundtrip(tmp_path):
 
 @needs
 def test_gaussian_input_allcheck_rejected():
-    from microscp.io.errors import FileFormatError
+    from microscope.io.errors import FileFormatError
     with pytest.raises(FileFormatError, match="checkpoint"):
         gaussian.read_gjf(DATA / "dvb_ir.gjf")   # geom=allcheck: no coordinates
 

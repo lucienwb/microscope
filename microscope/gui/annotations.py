@@ -193,9 +193,60 @@ def draw_measurement(painter: QPainter, mol: Molecule, camera: OrthoCamera,
                        center, text, metrics)
 
 
+AXIS_COLORS = (QColor(214, 57, 57), QColor(40, 158, 60), QColor(56, 108, 214))
+AXIS_NAMES = ("X", "Y", "Z")
+
+
+def draw_axis_indicator(painter: QPainter, camera: OrthoCamera,
+                        width: float, height: float, scale: float = 1.0) -> None:
+    """Corner triad showing how the world x/y/z axes currently point.
+
+    Purely an orientation cue: it sits in a fixed screen corner at a fixed
+    size, and only its directions follow the camera. Axes pointing away from
+    the viewer are drawn first and faded, so the triad reads as 3-D.
+    """
+    arm = 34.0 * scale
+    # kept clear of the bottom-left measurement HUD in the live viewport
+    origin = np.array([arm + 22.0 * scale, height - arm - 40.0 * scale])
+    font = QFont()
+    font.setPixelSize(int(13 * scale))
+    font.setBold(True)
+    painter.setFont(font)
+    # rotation maps world -> view, so column k is world axis k seen in view
+    # space; view x/y are screen right/up and view z points at the viewer
+    view_dirs = camera.rotation
+    order = np.argsort(view_dirs[2])          # back to front
+    for k in order:
+        d = view_dirs[:, k]
+        tip = origin + np.array([d[0], -d[1]]) * arm
+        toward = float(d[2])
+        color = QColor(AXIS_COLORS[k])
+        if toward < 0.0:                      # pointing away: fade it back
+            color.setAlpha(150)
+        pen = QPen(color)
+        pen.setWidthF(2.4 * scale)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(*origin), QPointF(*tip))
+        flat = float(np.hypot(d[0], d[1]))
+        if flat > 0.12:                       # too edge-on to label readably
+            label = origin + np.array([d[0], -d[1]]) * (arm + 9.0 * scale)
+            painter.setPen(QPen(color))
+            fm = painter.fontMetrics()
+            painter.drawText(
+                QPointF(label[0] - fm.horizontalAdvance(AXIS_NAMES[k]) / 2.0,
+                        label[1] + (fm.ascent() - fm.descent()) / 2.0),
+                AXIS_NAMES[k])
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(90, 90, 90))
+    painter.drawEllipse(QPointF(*origin), 2.6 * scale, 2.6 * scale)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+
 def draw_annotations(painter: QPainter, mol: Molecule, camera: OrthoCamera,
                      width: float, height: float, pinned: list[list[int]],
-                     label_mode: str = "none", scale: float = 1.0) -> None:
+                     label_mode: str = "none", scale: float = 1.0,
+                     axes: bool = False) -> None:
     """Everything Export Image needs on top of the raster render."""
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
@@ -205,3 +256,5 @@ def draw_annotations(painter: QPainter, mol: Molecule, camera: OrthoCamera,
         draw_atom_labels(painter, mol, pts, metrics, label_mode)
     for idxs in pinned:
         draw_measurement(painter, mol, camera, width, height, idxs, metrics)
+    if axes:
+        draw_axis_indicator(painter, camera, width, height, scale)

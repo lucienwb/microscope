@@ -7,8 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import (
-    QAction, QActionGroup, QColor, QImage, QImageWriter, QKeySequence, QPainter,
-    QSurfaceFormat,
+    QAction, QActionGroup, QColor, QKeySequence, QPainter, QSurfaceFormat,
 )
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
@@ -20,6 +19,7 @@ from .. import __version__
 from .. import io as mio
 from ..core import geometry
 from ..core.results import ParseResult
+from ..render.imagefile import write_image as _write_image
 from ..render.offscreen import render_molecule_image
 from ..render.scene import REP_BALL, REP_LINE, REP_STICK
 from .annotations import draw_annotations
@@ -47,15 +47,6 @@ SURFACE_PALETTES = (
     ("Green / Magenta", (0.30, 0.63, 0.36), (0.79, 0.29, 0.62)),
     ("Slate / Silver", (0.36, 0.42, 0.52), (0.72, 0.75, 0.80)),
 )
-
-
-def _write_image(image: QImage, path: str) -> None:
-    """Save as PNG or TIFF — both keep the transparent background intact."""
-    writer = QImageWriter(path)
-    if Path(path).suffix.lower() in (".tif", ".tiff"):
-        writer.setCompression(0)                # lossless master copy
-    if not writer.write(image):
-        raise RuntimeError(writer.errorString() or f"could not write {path}")
 
 
 class ExportImageDialog(QDialog):
@@ -282,7 +273,7 @@ class SurfaceDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("microscp")
+        self.setWindowTitle("microscope")
         self.result: ParseResult | None = None
         self.current_frame = 0
         self._surface_dialog: SurfaceDialog | None = None
@@ -319,6 +310,17 @@ class MainWindow(QMainWindow):
         self._add_action(edit_menu, "&Redo", QKeySequence.StandardKey.Redo, self._redo)
         edit_menu.addSeparator()
         self._add_action(edit_menu, "&Adjust Selection…", "E", self._adjust_selection)
+        self._add_action(edit_menu, "Select Connected &Fragment", "F",
+                         self._select_fragment)
+        self._gizmo_action = QAction("Show &Move/Rotate Handles", self, checkable=True)
+        self._gizmo_action.setChecked(self.viewport.show_gizmo)
+        self._gizmo_action.setShortcut(QKeySequence("G"))
+        self._gizmo_action.setToolTip(
+            "Drag the coloured arrows to slide the selection, the rings to turn "
+            "it, the centre dot to move it in the screen plane (Shift snaps)")
+        self._gizmo_action.toggled.connect(self._toggle_gizmo)
+        edit_menu.addAction(self._gizmo_action)
+        edit_menu.addSeparator()
         self._add_action(edit_menu, "Delete Selected Atoms", "X", self._delete_atoms)
         self._add_action(edit_menu, "Recompute &Bonds", "B", self._recompute_bonds)
 
@@ -365,6 +367,15 @@ class MainWindow(QMainWindow):
         self._hbond_action.setShortcut(QKeySequence("H"))
         self._hbond_action.toggled.connect(self._toggle_hbonds)
         view_menu.addAction(self._hbond_action)
+
+        self._axes_action = QAction("Show &XYZ Axes", self, checkable=True)
+        self._axes_action.setChecked(self.viewport.show_axes)
+        self._axes_action.setShortcut(QKeySequence("Shift+A"))
+        self._axes_action.setToolTip(
+            "Corner triad showing how the world x/y/z axes point (also exported)")
+        self._axes_action.toggled.connect(self._toggle_axes)
+        view_menu.addAction(self._axes_action)
+
         self._add_action(view_menu, "&Isosurface…", "I", self._show_surface_dialog)
 
         view_menu.addSeparator()
@@ -455,7 +466,7 @@ class MainWindow(QMainWindow):
                 f"Isosurface shown at ±{self.viewport.isovalue:g} — press I to adjust",
                 6000)
         name = Path(path).name
-        self.setWindowTitle(f"microscp — {name}")
+        self.setWindowTitle(f"microscope — {name}")
         info = f"{name}  ·  {mol.formula()}  ·  {mol.natoms} atoms  ·  {result.program}"
         if result.normal_termination is False:
             info += "  ·  ⚠ abnormal termination"
@@ -531,11 +542,13 @@ class MainWindow(QMainWindow):
                 vp.width() * scale, vp.height() * scale,
                 supersample=2, transparent=dialog.transparent.isChecked(),
                 volume=volume, isovalue=vp.isovalue, reps=vp.atom_reps)
-            if dialog.annotations.isChecked() and (vp.pinned or vp.label_mode != "none"):
+            if dialog.annotations.isChecked() and (vp.pinned or vp.show_axes
+                                                   or vp.label_mode != "none"):
                 painter = QPainter(image)
                 draw_annotations(painter, vp.molecule, vp.camera,
                                  image.width(), image.height(),
-                                 vp.pinned, vp.label_mode, scale=scale)
+                                 vp.pinned, vp.label_mode, scale=scale,
+                                 axes=vp.show_axes)
                 painter.end()
             _write_image(image, path)
             self.statusBar().showMessage(f"Exported {path}", 5000)
@@ -592,6 +605,24 @@ class MainWindow(QMainWindow):
     def _recompute_bonds(self):
         self.viewport.recompute_bonds()
         self.statusBar().showMessage("Bonds recomputed from covalent radii", 3000)
+
+    def _select_fragment(self):
+        n = self.viewport.select_fragment()
+        self.statusBar().showMessage(
+            f"Selected the connected fragment ({n} atoms)" if n
+            else "Select an atom of the fragment first", 4000)
+
+    def _toggle_gizmo(self, on: bool):
+        self.viewport.set_show_gizmo(on)
+        self.statusBar().showMessage(
+            "Move/rotate handles on — drag an arrow, a ring, or the centre dot "
+            "(Shift snaps to 0.1 Å / 15°)" if on
+            else "Move/rotate handles off", 4000)
+
+    def _toggle_axes(self, on: bool):
+        self.viewport.set_show_axes(on)
+        self.statusBar().showMessage(
+            f"XYZ axes {'shown' if on else 'hidden'}", 3000)
 
     def _undo(self):
         self.statusBar().showMessage(
@@ -660,8 +691,8 @@ class MainWindow(QMainWindow):
 
     def about(self):
         QMessageBox.about(
-            self, "About microscp",
-            f"<b>microscp {__version__}</b> — a microscope for molecules<br>"
+            self, "About microscope",
+            f"<b>microscope {__version__}</b> — a microscope for molecules (command: <code>scope</code>)<br>"
             "Structure and spectroscopy viewer for quantum chemistry.<br><br>"
             "Rotate: left-drag · Pan: right-drag · Zoom: scroll<br>"
             "Measure: click 2–4 atoms · Esc clears · M pins the measurement<br>"
@@ -681,7 +712,13 @@ class MainWindow(QMainWindow):
             break
 
 
-def main():
+def main(path: str | None = None, style: str = "cylview",
+         label_mode: str = "none", axes: bool = False) -> int:
+    """Open the viewer window. Returns the Qt exit code.
+
+    The optional arguments are the handful of `scope` flags that make sense
+    for an interactive session; the rest are silent-mode only.
+    """
     fmt = QSurfaceFormat()
     fmt.setVersion(3, 3)
     fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
@@ -690,15 +727,22 @@ def main():
     fmt.setSamples(8)
     QSurfaceFormat.setDefaultFormat(fmt)
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("microscp")
+    app = QApplication(sys.argv[:1])
+    app.setApplicationName("microscope")
     window = MainWindow()
     window.resize(1000, 720)
     window.show()
-    if len(sys.argv) > 1:
-        window.open_file(sys.argv[1])
-    sys.exit(app.exec())
+    if style != "cylview":
+        window._set_representation(style)
+    if label_mode != "none":
+        window.viewport.set_label_mode(label_mode)
+        window._label_actions[label_mode].setChecked(True)
+    if axes:
+        window._axes_action.setChecked(True)      # toggled -> viewport
+    if path:
+        window.open_file(path)
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else None))
