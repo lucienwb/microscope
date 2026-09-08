@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The README is reorganized around looking things up: three keyboard tables,
+  a table of the command-line flags, and an animation of Lewis mode turning.
+  Every key and flag in it was checked against the program, which turned up
+  one the old README had wrong (redo is the platform's standard key, not
+  Ctrl+Shift+Z). `scripts/record_demo.py` regenerates the animation
+
 - ruff and mypy are configured and both pass. They immediately found three
   things the tests could not: a `self` left behind in a method extracted to a
   module-level function, a re-exported constant an autofix had removed (which
