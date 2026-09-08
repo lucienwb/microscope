@@ -71,7 +71,7 @@ Dependencies are deliberately minimal and pip-installable everywhere:
 parsers are written in-house; if `cclib` happens to be installed it is used
 automatically as a fallback for formats the native parsers do not cover.
 
-## Usage
+## Quick start
 
 ```bash
 scope                 # open the viewer
@@ -79,10 +79,129 @@ scope mycalc.log      # open a file in it
 scope -s mycalc.log   # no window: render mycalc.png and exit
 ```
 
+## The viewer
+
+### Looking at a structure
+
+Left-drag turns it, right-drag pans, the wheel zooms. `A` with two atoms
+selected looks straight down that bond; with three, it puts their plane in the
+screen. `C` rotates about the selected atom, `Home` re-centres, `Ctrl+R`
+starts over.
+
+![turning a molecule](docs/orbit.gif)
+
+`V` switches between the CYLview look — ray-cast spheres and cylinders, never
+faceted, split-colour bonds — and the **Houk (Houkmol)** style: glossy
+ball-and-stick with black bonds, near-white carbons and the signature quadrant
+seam lines that stay readable in a black-and-white printout.
+
+![the CYLview look and the Houk style](docs/styles.gif)
+![the same molecule rendered in the Houk style](docs/screenshot_houk.png)
+
+`L` cycles the atom labels — element, element+number, number, off — and
+`Shift+A` puts a triad of the world axes in the corner, which turns with the
+molecule and is included in exported images.
+
+![cycling the atom labels](docs/labels.gif)
+![the XYZ axis triad following the rotation](docs/axes.gif)
+
+### Selecting and measuring
+
+Click atoms to build a selection of any size; click one again to drop it,
+click empty space or press `Esc` to clear. While two, three or four atoms are
+selected the distance, angle or dihedral is shown live and drawn the way a
+paper draws it — the distance written along the bond, the angle marked with an
+arc at the vertex, the dihedral with a rotation arrow around the central bond.
+
+![measuring a distance, an angle and a dihedral](docs/measure.gif)
+
+`M` pins the current measurement into the scene so it stays while you pick the
+next one (`Shift+M` clears them); pinned measurements are exported with the
+figure. Larger selections just report the count, ready for the region
+commands below.
+
+![labels, pinned measurements and plane alignment](docs/screenshot_features.png)
+
+### Moving atoms by hand
+
+A manipulator sits on whatever is selected. Drag the red, green and blue
+**arrows** to slide it along x, y or z, the matching **rings** to turn it about
+that axis, or the **centre dot** to move it in the plane of the screen. Hold
+`Shift` to snap to 0.1 Å and 15°. `F` first grows the selection to the whole
+connected fragment, so a ligand or a substituent is picked up in one
+keystroke, and `G` hides the handles when they are in the way. Everything is
+undoable.
+
+![sliding and turning a fragment with the manipulator](docs/handles.gif)
+
+For an exact change rather than a dragged one, select 2–4 atoms and press `E`:
+a dialog sets the distance, angle or dihedral with live preview, and the
+attached fragment moves with it (ring bonds move only the end atom). `X`
+deletes the selection, `B` recomputes bonds after a large change.
+
+### Mixed representations
+
+Select a region and give it its own level of detail with `1`, `2` and `3` —
+ball-and-stick for the part that matters, sticks for the surroundings, thin
+lines for the rest. With nothing selected the whole molecule switches.
+
+![giving a region its own level of detail](docs/regions.gif)
+
+### Lewis structures
+
+`Shift+L` redraws the molecule flat and skeletal the way ChemDraw does: bare
+carbon vertices, `OH` and `NH₂` labels with the hydrogens folded in, double
+bonds with the second line inside the ring, formal charges. It shares the
+camera with the 3-D view, so **turning it is how you choose the angle the
+drawing is made from** — drag to turn, `Shift`+drag to spin it in the plane of
+the page. The mode is deliberately read-only, because picking the angle is all
+it is for.
+
 ![turning a Lewis structure to pick the angle it is drawn from](docs/lewis_spin.gif)
 
-*Lewis mode: the drawing is the molecule seen through the same camera as the
-3-D view, so turning it is how you choose the angle it is drawn from.*
+Four toggles decide what it shows: every hydrogen or only the folded ones,
+labelled carbons, lone-pair dots, and coloured heteroatoms.
+
+![the Lewis drawing options](docs/lewis_options.gif)
+
+![the Lewis structure mode beside the 3-D view](docs/screenshot_lewis.png)
+
+Export it as PNG or TIFF, as **SVG or PDF** (it is line art, so it stays line
+art), or `Ctrl+Shift+S` to write a **ChemDraw CDXML** or an **MDL molfile** at
+the angle on screen, carrying the bond orders, charges and implicit hydrogens,
+ready to rearrange in ChemDraw.
+
+Bond orders and charges are worked out from the geometry, and that cannot
+always be right — a carbocation and a carbanion have the same connectivity,
+and a metal complex has no Lewis structure at all. A charge the file declares
+but the drawing cannot put on any atom goes on square brackets round the whole
+structure, the way a delocalized radical cation is drawn. Where it still
+cannot be sure, the drawing says so rather than inventing an answer: the
+perceived charge disagreeing with the file, a metal whose surrounding charges
+are only bookkeeping, atoms stacked behind each other in this view (which just
+means: turn it).
+
+### Orbitals and densities
+
+Open a `.cube` file from `cubegen`, `orca_plot` or anywhere else and the
+surface appears. `I` opens live controls — isovalue, opacity, a colour for
+each lobe from curated pairs or any RGB/HEX value, and which orbital to show
+for a multi-MO cube.
+
+![sweeping the isovalue of an orbital](docs/isosurface.gif)
+
+### Trajectories and vibrations
+
+An optimization, IRC or scan plays back geometry by geometry, with the energy
+of each.
+
+![playing back a coordinate scan](docs/trajectory.gif)
+
+Open a frequency job and the spectra panel appears (`S`). **Click an IR band
+and the molecule walks through that normal mode** — click again or press
+`Space` to stop.
+
+![animating a normal mode](docs/vibration.gif)
 
 ## Keyboard reference
 
@@ -185,52 +304,6 @@ loads only matplotlib — neither starts Qt.
 viewer labels them. `--style`, `--labels`, `--axes` and `--lewis` also work
 without `-s`, to open the viewer already set up that way; the render-only
 flags are refused in GUI mode rather than silently ignored.
-
-## In the viewer
-
-**Mixed representations.** Select a region and give it its own level of
-detail — the active site in full ball-and-stick, spectator ligands as sticks,
-everything else as thin lines.
-
-**Move and rotate by hand.** A manipulator sits on whatever is selected: drag
-the red/green/blue arrows to slide it along x/y/z, the matching rings to turn
-it about that axis, the centre dot to move it in the screen plane. Hold
-`Shift` to snap to 0.1 Å / 15°. `F` grows the selection to the whole connected
-fragment first, so a substituent is picked up in one keystroke.
-
-![the move/rotate manipulator and the XYZ axis indicator](docs/screenshot_gizmo.png)
-
-**Measurements** are drawn the way a paper draws them: the distance written
-along the bond, angles marked with an arc at the vertex, dihedrals with a
-rotation arrow around the central bond. `M` pins one into the scene, and
-pinned measurements are included in exported images.
-
-![labels, pinned measurements and plane alignment](docs/screenshot_features.png)
-
-**Lewis structure mode** (`Shift+L`) redraws the molecule flat and skeletal
-the way ChemDraw does — bare carbon vertices, `OH`/`NH₂` labels with the
-hydrogens folded in, double bonds with the second line inside the ring, formal
-charges, lone-pair dots on request. It shares the camera with the 3-D view, so
-turning it chooses the angle the drawing is made from. The mode is
-deliberately read-only, because picking the angle is all it is for.
-
-![the Lewis structure mode](docs/screenshot_lewis.png)
-
-Bond orders and charges are worked out from the geometry, and that cannot
-always be right — a carbocation and a carbanion have the same connectivity,
-and a metal complex has no Lewis structure at all. A charge the file declares
-but the drawing cannot put on any atom goes on square brackets round the whole
-structure, the way a delocalized radical cation is drawn. Where it still
-cannot be sure, the drawing says so: the perceived charge disagreeing with the
-file, a metal whose surrounding charges are only bookkeeping, atoms stacked
-behind each other in this view (which just means: turn it).
-
-**Isosurfaces.** Open a `.cube` file (from `cubegen`, `orca_plot`, …) and the
-orbital or density surface appears; `I` opens live controls.
-
-![orbital isosurface from a cube file](docs/screenshot_isosurface.png)
-
-![the same molecule in the Houk (Houkmol) style](docs/screenshot_houk.png)
 
 ## Supported files
 

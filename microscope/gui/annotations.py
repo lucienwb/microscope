@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from ..core import geometry, measure
 from ..core.molecule import Molecule
 from ..render.camera import OrthoCamera
+from . import gizmo as gizmo_handles
 
 TEXT_COLOR = QColor(25, 25, 25)
 HALO_COLOR = QColor(255, 255, 255)
@@ -254,3 +255,54 @@ def draw_annotations(painter: QPainter, mol: Molecule, camera: OrthoCamera,
         draw_measurement(painter, mol, camera, width, height, idxs, metrics)
     if axes:
         draw_axis_indicator(painter, camera, width, height, scale)
+
+
+# What the viewer paints on top of the rendered molecule.
+MARKER_COLOR = QColor(235, 130, 20)      # the ring round a selected atom
+LINE_COLOR = QColor(60, 60, 60)          # the live measurement
+PIN_COLOR = QColor(95, 95, 95)           # a measurement pinned into the scene
+
+
+def draw_overlay(painter: QPainter, mol: Molecule, camera: OrthoCamera,
+                 width: int, height: int, *, label_mode: str = "none",
+                 pinned=(), selection=(), selection_text: str = "",
+                 show_axes: bool = False, gizmo_center=None,
+                 gizmo_hover=None, gizmo_active=None) -> None:
+    """Everything drawn over the 3-D render: labels, measurements, handles.
+
+    Kept here rather than in the widget so that anything with a camera and a
+    painter can reproduce exactly what the viewport shows — the recorder that
+    makes the README animations does, and it must not drift from the real
+    thing.
+    """
+    pts = camera.project(mol.coords, width, height)
+    m = overlay_metrics(height, camera.half_height)
+
+    if show_axes:
+        draw_axis_indicator(painter, camera, width, height)
+    if label_mode != "none":
+        draw_atom_labels(painter, mol, pts, m, label_mode)
+    for idxs in pinned:
+        draw_measurement(painter, mol, camera, width, height, idxs, m,
+                         color=PIN_COLOR)
+
+    if len(selection):
+        if 2 <= len(selection) <= 4:      # larger selections: markers only
+            draw_measurement(painter, mol, camera, width, height, selection, m,
+                             color=LINE_COLOR)
+        pen = QPen(MARKER_COLOR)
+        pen.setWidthF(max(2.0, m["line_w"]))
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        r = m["marker_r"]
+        for x, y in pts[list(selection)]:
+            painter.drawEllipse(int(x - r), int(y - r), int(2 * r), int(2 * r))
+        if selection_text:
+            font = QFont()
+            font.setPointSize(11)         # HUD text: fixed, screen-anchored
+            painter.setFont(font)
+            draw_halo_text(painter, 12, height - 14, selection_text)
+
+    if gizmo_center is not None:
+        gizmo_handles.draw(painter, camera, width, height, gizmo_center,
+                           hovered=gizmo_hover, active=gizmo_active)

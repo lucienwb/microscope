@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from ..core import editing, measure
@@ -540,42 +540,13 @@ class MoleculeViewport(QOpenGLWidget):
     def _draw_overlay(self):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        mol = self.molecule
-        w, h = self.width(), self.height()
-        pts = self.camera.project(mol.coords, w, h)
-        m = annotations.overlay_metrics(h, self.camera.half_height)
-
-        if self.show_axes:
-            annotations.draw_axis_indicator(painter, self.camera, w, h)
-
-        if self.label_mode != "none":
-            annotations.draw_atom_labels(painter, mol, pts, m, self.label_mode)
-
-        for idxs in self.pinned:
-            annotations.draw_measurement(painter, mol, self.camera, w, h,
-                                         idxs, m, color=_PIN_COLOR)
-
-        if self.selection:
-            if 2 <= len(self.selection) <= 4:   # larger selections: markers only
-                annotations.draw_measurement(painter, mol, self.camera, w, h,
-                                             self.selection, m, color=_LINE_COLOR)
-            marker_pen = QPen(_MARKER_COLOR)
-            marker_pen.setWidthF(max(2.0, m["line_w"]))
-            painter.setPen(marker_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            r = m["marker_r"]
-            for x, y in pts[self.selection]:
-                painter.drawEllipse(int(x - r), int(y - r), int(2 * r), int(2 * r))
-            text = self.measurement_text()
-            if text:
-                font = QFont()
-                font.setPointSize(11)   # HUD text: fixed, screen-anchored
-                painter.setFont(font)
-                annotations.draw_halo_text(painter, 12, h - 14, text)
-
-        if self.gizmo_visible:
-            gizmo.draw(painter, self.camera, w, h, self._gizmo_center(),
-                       hovered=self._gizmo_hover, active=self._gizmo_drag)
+        annotations.draw_overlay(
+            painter, self.molecule, self.camera, self.width(), self.height(),
+            label_mode=self.label_mode, pinned=self.pinned,
+            selection=self.selection, selection_text=self.measurement_text(),
+            show_axes=self.show_axes,
+            gizmo_center=self._gizmo_center() if self.gizmo_visible else None,
+            gizmo_hover=self._gizmo_hover, gizmo_active=self._gizmo_drag)
         painter.end()
 
     # ------------------------------------------------------------------ input

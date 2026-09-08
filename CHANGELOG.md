@@ -2,11 +2,17 @@
 
 ## Unreleased
 
-- The README is reorganized around looking things up: three keyboard tables,
-  a table of the command-line flags, and an animation of Lewis mode turning.
-  Every key and flag in it was checked against the program, which turned up
-  one the old README had wrong (redo is the platform's standard key, not
-  Ctrl+Shift+Z). `scripts/record_demo.py` regenerates the animation
+- The README shows the program working: twelve animations, one per thing it
+  does - turning a structure, the two styles, labels, the axis triad,
+  measuring, the manipulator, mixed representations, Lewis mode and its
+  options, isosurfaces, a scan playing back, a normal mode. It also has three
+  keyboard tables and a table of the command-line flags, all checked against
+  the program (redo was documented wrong, and eight flags were missing).
+  `scripts/record_demo.py` records the clips offscreen through the same code
+  the viewer uses, so they cannot drift from what it draws
+- What the viewport paints over the render - labels, measurements, selection
+  markers, the manipulator - is `annotations.draw_overlay`, so anything with a
+  camera and a painter can reproduce exactly what the viewer shows
 
 - ruff and mypy are configured and both pass. They immediately found three
   things the tests could not: a `self` left behind in a method extracted to a
