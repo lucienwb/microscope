@@ -45,7 +45,8 @@ class ParseResult:
     nmr_shieldings: list[NMRShielding] = field(default_factory=list)
     volumes: list = field(default_factory=list)              # VolumeData grids
     normal_termination: bool | None = None
-    extras: dict = field(default_factory=dict)
+    route: str = ""              # the job's route/keyword line, where it has one
+    parser: str = "native"       # "native", or "cclib" when the fallback read it
 
     @property
     def molecule(self) -> Molecule | None:
@@ -54,3 +55,8 @@ class ParseResult:
     @property
     def nframes(self) -> int:
         return len(self.frames)
+
+    @property
+    def read_by_cclib(self) -> bool:
+        """Did the optional fallback read this, rather than a parser here?"""
+        return self.parser == "cclib"

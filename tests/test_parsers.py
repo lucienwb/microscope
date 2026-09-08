@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import microscope.io as mio
-from microscope.io import fchk, gaussian, molden, orca, qchem
+from microscope.io import fchk, gaussian, orca, qchem
 
 DATA = Path(__file__).parent / "data"
 
@@ -255,3 +255,39 @@ def test_fchk_unrestricted():
     assert (mol.charge, mol.multiplicity) == (1, 2)
     mol.perceive_bonds()
     assert 20 <= len(mol.bonds) <= 22
+
+
+def test_qchem_skips_ghost_atoms_and_fragment_blocks(tmp_path):
+    """A counterpoise job prints the fragments, with ghosts, after the whole.
+
+    Taking the last block left the viewer holding one sodium atom, and the
+    basis-only centres came through as element X.
+    """
+    def orientation(rows):
+        return ("             Standard Nuclear Orientation (Angstroms)\n"
+                "    I     Atom           X                Y                Z\n"
+                " ----------------------------------------------------------\n"
+                + rows +
+                " ----------------------------------------------------------\n")
+
+    out = tmp_path / "cp.out"
+    out.write_text(
+        "$molecule\n1 2\n$end\n"
+        + orientation("    1      C      -1.4476    0.0000    0.0000\n"
+                      "    2      H      -1.5627    0.3304   -1.0238\n"
+                      "    3      Na      1.2156    0.0000    0.0000\n")
+        + orientation("    1      C      -1.4476    0.0000    0.0000\n"
+                      "    2      H      -1.5627    0.3304   -1.0238\n"
+                      "    3      GH      1.2156    0.0000    0.0000\n")
+        + orientation("    1      Na      1.2156    0.0000    0.0000\n"))
+
+    mol = qchem.read_log(out).molecule
+    assert mol.symbols == ["C", "H", "Na"]
+    assert "X" not in mol.symbols
+    assert mol.charge == 1 and mol.charge_known
+
+
+def test_formats_without_a_charge_field_say_so(tmp_path):
+    xyz = tmp_path / "m.xyz"
+    xyz.write_text("2\ntitle\nO 0.0 0.0 0.0\nH 0.96 0.0 0.0\n")
+    assert not mio.load(xyz).molecule.charge_known

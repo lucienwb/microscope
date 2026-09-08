@@ -172,7 +172,8 @@ def read_log(path) -> ParseResult:
     for syms, xyz in frames_raw:
         if frames and len(frames[-1].symbols) == len(syms) and np.allclose(frames[-1].coords, xyz):
             continue
-        frames.append(Molecule(syms, xyz, charge=charge or 0, multiplicity=mult or 1))
+        frames.append(Molecule(syms, xyz, charge=charge or 0, multiplicity=mult or 1,
+                               charge_known=charge is not None))
 
     natoms = frames[-1].natoms
     vibrations: list[Vibration] = []

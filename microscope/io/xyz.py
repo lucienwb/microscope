@@ -36,7 +36,8 @@ def read(path) -> ParseResult:
                 raise FileFormatError(f"{path}: malformed atom line {row!r}")
             symbols.append(parts[0])
             coords.append([float(x) for x in parts[1:4]])
-        frames.append(Molecule(symbols, np.array(coords), title=title))
+        frames.append(Molecule(symbols, np.array(coords), title=title,
+                               charge_known=False))
         i += 2 + natoms
     if not frames:
         raise FileFormatError(f"{path}: no frames found")

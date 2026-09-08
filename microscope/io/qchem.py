@@ -21,6 +21,9 @@ def looks_like_output(text: str) -> bool:
     return "Welcome to Q-Chem" in text or "Q-Chem, Inc" in text
 
 
+GHOST = "GH"          # Q-Chem's marker for a ghost (basis-only) centre
+
+
 def read_log(path) -> ParseResult:
     lines = Path(path).read_text(errors="replace").splitlines()
     n = len(lines)
@@ -47,8 +50,9 @@ def read_log(path) -> ParseResult:
                     coords3 = [float(p) for p in parts[2:5]]
                 except ValueError:
                     break
-                syms.append(parts[1])
-                xyz.append(coords3)
+                if parts[1].upper() != GHOST:     # counterpoise centre
+                    syms.append(parts[1])
+                    xyz.append(coords3)
                 i += 1
             if syms:
                 frames_raw.append((syms, np.array(xyz)))
@@ -99,11 +103,18 @@ def read_log(path) -> ParseResult:
     if not frames_raw:
         raise FileFormatError(f"{path}: no geometry found in Q-Chem output")
 
+    # A fragment or counterpoise job prints each piece on its own after the
+    # whole system; those blocks are shorter, and taking the last one would
+    # leave the viewer holding a single sodium atom.
+    whole = max(len(syms) for syms, _ in frames_raw)
+    frames_raw = [f for f in frames_raw if len(f[0]) == whole]
+
     frames: list[Molecule] = []
     for syms, xyz in frames_raw:
         if frames and len(frames[-1].symbols) == len(syms) and np.allclose(frames[-1].coords, xyz):
             continue
-        frames.append(Molecule(syms, xyz, charge=charge or 0, multiplicity=mult or 1))
+        frames.append(Molecule(syms, xyz, charge=charge or 0, multiplicity=mult or 1,
+                               charge_known=charge is not None))
 
     return ParseResult(
         frames=frames, program="Q-Chem", source=str(path),

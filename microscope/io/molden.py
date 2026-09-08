@@ -65,7 +65,7 @@ def read(path) -> ParseResult:
             syms.append(elements.SYMBOLS[z] if 0 < z < len(elements.SYMBOLS) else parts[0])
             xyz.append(coords3)
         if syms:
-            frames.append(Molecule(syms, np.array(xyz)))
+            frames.append(Molecule(syms, np.array(xyz), charge_known=False))
             natoms = len(syms)
 
     # optimization history from [GEOMETRIES] XYZ
@@ -91,7 +91,7 @@ def read(path) -> ParseResult:
                 syms.append(parts[0])
                 xyz.append(coords3)
         if syms:
-            frames.append(Molecule(syms, np.array(xyz)))
+            frames.append(Molecule(syms, np.array(xyz), charge_known=False))
             natoms = len(syms)
 
     if not frames:
@@ -153,6 +153,6 @@ def _parse_xyz_frames(body: list[str]) -> list[Molecule]:
                 syms.append(parts[0])
                 xyz.append([float(v) for v in parts[1:4]])
         if len(syms) == count:
-            frames.append(Molecule(syms, np.array(xyz)))
+            frames.append(Molecule(syms, np.array(xyz), charge_known=False))
         i += 2 + count
     return frames

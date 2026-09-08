@@ -91,5 +91,5 @@ def read(path) -> ParseResult | None:
         excited_states=excited,
         nmr_shieldings=nmr,
         normal_termination=bool(metadata.get("success")) if "success" in metadata else None,
-        extras={"parser": "cclib"},
+        parser="cclib",
     )

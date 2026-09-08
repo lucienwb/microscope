@@ -42,7 +42,10 @@ def read_log(path) -> ParseResult:
     while i < n:
         line = lines[i]
 
-        if "orientation:" in line and ("Standard" in line or "Input" in line):
+        # "Z-Matrix orientation" is what older Gaussian writes for a job whose
+        # input was a Z-matrix; the block below it is laid out like the others
+        if "orientation:" in line and ("Standard" in line or "Input" in line
+                                       or "Z-Matrix" in line):
             target = frames_std if "Standard" in line else frames_inp
             i += 5  # skip dashes, two header lines, dashes
             zs, xyz = [], []
@@ -131,6 +134,7 @@ def read_log(path) -> ParseResult:
             coords=xyz,
             charge=charge or 0,
             multiplicity=mult or 1,
+            charge_known=charge is not None,
         ))
 
     result = ParseResult(
@@ -144,7 +148,7 @@ def read_log(path) -> ParseResult:
         normal_termination=normal_terms > 0,
     )
     if route:
-        result.extras["route"] = route
+        result.route = route
     return result
 
 
@@ -251,7 +255,7 @@ def read_gjf(path) -> ParseResult:
                    title=" ".join(title_lines))
     result = ParseResult(frames=[mol], program="Gaussian input", source=str(path))
     if route_lines:
-        result.extras["route"] = " ".join(route_lines)
+        result.route = " ".join(route_lines)
     return result
 
 

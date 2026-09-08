@@ -32,7 +32,8 @@ def read(path) -> ParseResult:
             break
     if not symbols:
         raise FileFormatError(f"{path}: no ATOM/HETATM records found")
-    mol = Molecule(symbols, np.array(coords), title=Path(path).stem)
+    mol = Molecule(symbols, np.array(coords), title=Path(path).stem,
+                   charge_known=False)
     return ParseResult(frames=[mol], program="PDB", source=str(path))
 
 
