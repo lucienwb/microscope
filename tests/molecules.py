@@ -95,3 +95,21 @@ def _drawing(mol, options=None):
     include = [a for a in range(mol.natoms) if not hidden[a]]
     points = _camera(mol).project(mol.coords, W, H)
     return structure, points, include
+
+def _dicyanobenzene():
+    """A benzene ring with two para nitriles, all at reference lengths."""
+    angles = np.arange(6) * np.pi / 3.0
+    ring = np.column_stack([1.39 * np.cos(angles), 1.39 * np.sin(angles),
+                            np.zeros(6)])
+    out = ring / 1.39                                   # radial unit vectors
+    symbols = ["C"] * 6
+    coords = [ring]
+    for k in range(6):
+        if k in (0, 3):                                 # para positions: -C#N
+            symbols += ["C", "N"]
+            coords.append(np.array([ring[k] + 1.43 * out[k],
+                                    ring[k] + (1.43 + 1.16) * out[k]]))
+        else:
+            symbols.append("H")
+            coords.append(np.array([ring[k] + 1.09 * out[k]]))
+    return _molecule(symbols, np.vstack(coords))

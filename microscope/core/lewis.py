@@ -338,6 +338,22 @@ def _assign_orders(molecule, bonds, z, symbols, neighbors) -> np.ndarray:
         [max(0, max_bonds(z[a]) - len(neighbors[a])) if is_main_group(z[a]) else 0
          for a in range(molecule.natoms)], dtype=np.int16)
 
+    # A bond that plainly wants a triple claims its valence before the doubles
+    # are handed out, but only where both atoms can afford every triple they
+    # want. Carbon dioxide's carbon wants two and can afford one, so it falls
+    # through to the double pass and comes out O=C=O; a nitrile carbon wants
+    # one and can afford it, so it is not left as C=N with a nitrogen anion.
+    demand = np.zeros(molecule.natoms, dtype=np.int16)
+    for b in range(len(bonds)):
+        if wanted[b] >= 3:
+            demand[bonds[b][0]] += 1
+            demand[bonds[b][1]] += 1
+    for b in range(len(bonds)):
+        i, j = bonds[b]
+        if wanted[b] >= 3 and 2 * demand[i] <= capacity[i] \
+                and 2 * demand[j] <= capacity[j]:
+            orders[b] = 3
+
     for target in (2, 3):
         candidates = [b for b in range(len(bonds))
                       if wanted[b] >= target and orders[b] == target - 1]
@@ -351,8 +367,8 @@ def _assign_orders(molecule, bonds, z, symbols, neighbors) -> np.ndarray:
                 spare[j] -= 1
         while _augment(bonds, orders, spare, candidates, target):
             spare = _spare(capacity, bonds, orders)
-    return orders
 
+    return orders
 
 def _spare(capacity, bonds, orders) -> np.ndarray:
     """Valence each atom has left once the multiple bonds so far are counted."""

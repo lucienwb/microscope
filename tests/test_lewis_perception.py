@@ -5,7 +5,7 @@ matter, not the pixels."""
 
 import numpy as np
 import pytest
-from molecules import _acene, _benzene, _molecule, _nitrate, _orders, _water
+from molecules import _acene, _benzene, _dicyanobenzene, _molecule, _nitrate, _orders, _water
 
 from microscope.core import lewis
 
@@ -191,3 +191,23 @@ def test_metals_are_left_out_of_the_bookkeeping():
     structure = lewis.perceive(complexed)
     assert structure.charges[0] == 0 and structure.lone_pairs[0] == 0
     assert int(structure.orders[0]) == 1
+
+def test_a_nitrile_keeps_its_triple_next_to_a_ring():
+    """The double pass runs first and can spend the carbon's last valence.
+
+    Terephthalonitrile, 4-cyanopyridine, tetracyanoethylene and a real
+    fullerene dye all came out with C=N and a nitrogen anion.
+    """
+    structure = lewis.perceive(_dicyanobenzene())
+    assert _orders(structure)[3] == 2          # both C#N
+    assert _orders(structure)[2] == 3          # and a Kekule ring
+    assert not structure.charges.any()
+    assert structure.matches_file
+
+
+def test_carbon_dioxide_still_refuses_the_triple():
+    """The counter-case: its carbon wants two triples and can afford one, so
+    neither may claim the valence up front."""
+    structure = lewis.perceive(
+        _molecule(["O", "C", "O"], [[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]))
+    assert _orders(structure)[2] == 2 and _orders(structure)[3] == 0
