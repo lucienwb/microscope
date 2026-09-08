@@ -9,6 +9,5 @@ dist/
 .coverage
 .DS_Store
 *.png.tmp
-examples/*.xyz
-examples/*.gjf
-examples/*.pdb
+examples/output/
+examples/data/

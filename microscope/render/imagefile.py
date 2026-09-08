@@ -10,8 +10,6 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage, QImageWriter
 
-IMAGE_SUFFIXES = (".png", ".tif", ".tiff")
-
 
 def write_image(image: QImage, path) -> None:
     """Save as PNG or TIFF — both keep the transparent background intact."""

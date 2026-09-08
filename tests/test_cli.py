@@ -9,8 +9,7 @@ import pytest
 
 from microscope import cli
 from microscope.core.molecule import Molecule
-from microscope.core.results import (ExcitedState, NMRShielding, ParseResult,
-                                     Vibration)
+from microscope.core.results import ExcitedState, NMRShielding, ParseResult, Vibration
 from microscope.render.scene import REP_BALL, REP_LINE, REP_STICK
 
 

@@ -20,6 +20,10 @@ figures ready for a paper.
   look: glossy ball-and-stick with black bonds, near-white carbons and the
   signature quadrant seam lines on every heavy atom, readable even in
   black-and-white printouts
+- **Lewis structure mode** — `Shift+L` redraws the molecule flat and
+  skeletal the way ChemDraw does, with double bonds, charges and (on request)
+  lone pairs. Turning it picks the angle the drawing is made from; save the
+  picture, or save a **ChemDraw `.cdxml`/`.mol`** to keep editing there
 - **Mixed representations** — select a region and give it its own level of
   detail: ball-and-stick for the important part (`1`), sticks for the
   surroundings (`2`), thin lines for the rest (`3`)
@@ -102,13 +106,23 @@ scope -s td.log   --uv --unit eV --xrange 2:7 -o uv.svg
 scope -s nmr.log  --nmr --nucleus C --reference 186.4 --csv shifts.csv
 ```
 
+`--lewis` draws the flat Lewis structure instead of the 3-D model, and `-o`
+decides what comes out — a picture, vector art, or a structure file:
+
+```bash
+scope -s mol.log --lewis --align 2,3,4 -o scheme.svg
+scope -s mol.log --lewis -o mol.cdxml        # opens in ChemDraw at that angle
+scope -s mol.log --lewis --lone-pairs --color-atoms -o lewis.png
+```
+
 IR and δ axes run high → low as spectra are conventionally drawn, sticks sit
 under the broadened curve (`--no-sticks` drops them), UV-Vis oscillator
 strengths get their own right-hand axis, and `--csv` writes the plotted curve
 as data. Figures go to PNG, PDF, SVG, EPS or TIFF at `--dpi` (300 by default).
 
-`--style`, `--labels` and `--axes` also work without `-s`, to open the viewer
-already set up that way; the render-only flags refuse to run silently ignored.
+`--style`, `--labels`, `--axes` and `--lewis` also work without `-s`, to open
+the viewer already set up that way; the render-only flags refuse to run
+silently ignored.
 
 - **Rotate**: left-drag &nbsp;·&nbsp; **Pan**: right-drag &nbsp;·&nbsp; **Zoom**: scroll
 - **Representation**: `V` toggles between the CYLview look and the Houk
@@ -133,6 +147,29 @@ already set up that way; the render-only flags refuse to run silently ignored.
 
 ![the move/rotate manipulator and the XYZ axis indicator](docs/screenshot_gizmo.png)
 
+- **Lewis structure**: `Shift+L` (View → Lewis Structure) swaps the 3-D model
+  for the flat, ChemDraw-style drawing — bare carbon vertices, `OH`/`NH₂`
+  labels with the hydrogens folded in, double bonds with the second line
+  inside the ring, formal charges, and lone-pair dots if you want them.
+  It shares the camera with the 3-D view, so **turning it is how you choose
+  the angle the drawing is made from**: drag to turn, `Shift`+drag to spin it
+  in the plane of the page, scroll to zoom. The mode is deliberately
+  read-only — the Edit menu greys out — because picking the angle is all it
+  is for. Export it as PNG/TIFF **or SVG/PDF** (it is line art), or
+  File → Save for ChemDraw… (`Ctrl+Shift+S`) to write a **CDXML** or **MDL
+  molfile** carrying the bond orders, charges and implicit hydrogens, ready
+  to rearrange in ChemDraw
+
+![the Lewis structure mode](docs/screenshot_lewis.png)
+
+  Bond orders and charges are worked out from the geometry, and that cannot
+  always be right — a carbocation and a carbanion have the same connectivity,
+  and a metal complex has no Lewis structure at all. So the perceived total
+  charge is checked against the charge in the file, and the status bar says
+  so when they disagree instead of quietly showing you the wrong thing. It
+  also warns when atoms are stacked behind each other in the current view,
+  which just means: turn it.
+
 - **XYZ axes**: `Shift+A` shows a corner triad of the world axes (View → Show
   XYZ Axes); it is included in exported images too
 - **Pin measurements**: `M` keeps the current measurement displayed in the scene (several at once; `Shift+M` clears)
@@ -155,7 +192,8 @@ already set up that way; the render-only flags refuse to run silently ignored.
 - **Export**: File → Export Image… for high-resolution figures — transparent
   PNG or uncompressed TIFF — with isosurfaces, atom labels, pinned
   measurements and the XYZ axes included
-- **Save**: File → Save As… to write `xyz`, Gaussian input (`.gjf`), or `pdb` — including edited structures
+- **Save**: File → Save As… to write `xyz`, Gaussian input (`.gjf`), `pdb` or
+  an MDL molfile (`.mol`) — including edited structures
 
 ![labels, pinned measurements and plane alignment](docs/screenshot_features.png)
 
@@ -176,6 +214,8 @@ already set up that way; the render-only flags refuse to run silently ignored.
 | Molden (`.molden`) | ✅ geometries, frequencies + normal modes | — |
 | Cube (`.cube`/`.cub`) | ✅ geometry + volumetric MO/density grids (incl. multi-MO) | — |
 | PDB | ✅ | ✅ |
+| MDL molfile (`.mol`/`.sdf`) | — | ✅ 3-D, or the flat drawing with bond orders |
+| ChemDraw (`.cdxml`) | — | ✅ the flat drawing at the angle on screen |
 
 Program outputs are recognized by content, not extension — any `.log`/`.out`
 file is sniffed and routed to the right parser. If `cclib` is installed it

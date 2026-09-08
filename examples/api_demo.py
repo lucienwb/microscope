@@ -44,7 +44,8 @@ print(f"[NMR]  {len(nmr.nmr_shieldings)} shieldings; carbon isotropic values:")
 print("         " + "  ".join(f"{s.isotropic:6.1f}" for s in carbons[:5]) + "  ... ppm")
 
 # --- 6. convert / write files -------------------------------------------------
-out = Path(__file__).parent
+out = Path(__file__).parent / "output"
+out.mkdir(exist_ok=True)
 mio.save_molecule(out / "dvb_final.xyz", mol)
 mio.save_molecule(out / "dvb_new_job.gjf", mol)
 mio.save_molecule(out / "dvb.pdb", mol)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ..core.molecule import Molecule
 from ..core.results import ParseResult
-from . import cclib_bridge, cube, fchk, gaussian, molden, orca, pdbfile, qchem, xyz
+from . import cclib_bridge, cdxml, cube, fchk, gaussian, molden, molfile, orca, pdbfile, qchem, xyz
 from .errors import FileFormatError, UnsupportedFormatError
 
 OPEN_EXTENSIONS = (".xyz", ".log", ".out", ".fchk", ".fck", ".fch",
@@ -64,7 +64,7 @@ def load(path) -> ParseResult:
                 "install cclib for extended format support."
             )
         raise UnsupportedFormatError(f"{path.name}: unknown file extension {ext!r}")
-    except (FileFormatError,) as native_error:
+    except FileFormatError as native_error:
         result = _try_cclib(path)
         if result is not None:
             return result
@@ -94,8 +94,33 @@ def save_molecule(path, molecule: Molecule) -> None:
         qchem.write_in(path, molecule)
     elif ext == ".pdb":
         pdbfile.write(path, molecule)
+    elif ext in (".mol", ".sdf"):
+        molfile.write(path, molecule)
     else:
         raise UnsupportedFormatError(
-            f"cannot write {ext!r} files "
-            "(supported: .xyz, .gjf/.com, .inp [ORCA], .in/.qcin [Q-Chem], .pdb)"
+            f"cannot write {ext!r} files (supported: .xyz, .gjf/.com, "
+            ".inp [ORCA], .in/.qcin [Q-Chem], .pdb, .mol/.sdf)"
+        )
+
+
+LEWIS_EXTENSIONS = (".cdxml", ".mol", ".sdf")
+
+
+def save_lewis(path, structure, coords2d, include=None) -> None:
+    """Write a perceived Lewis structure as a file a drawing program can open.
+
+    The coordinates are the ones on the page, so ChemDraw opens the structure
+    at the angle it was composed at here. *include* lists the atoms that are
+    actually drawn; hydrogens left out become implicit hydrogen counts.
+    """
+    path = Path(path)
+    ext = path.suffix.lower()
+    if ext == ".cdxml":
+        cdxml.write(path, structure, coords2d, include)
+    elif ext in (".mol", ".sdf"):
+        molfile.write_2d(path, structure, coords2d, include)
+    else:
+        raise UnsupportedFormatError(
+            f"cannot write {ext!r} structures "
+            "(supported: .cdxml [ChemDraw], .mol/.sdf [MDL molfile])"
         )

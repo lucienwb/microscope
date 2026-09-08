@@ -57,6 +57,12 @@ class OrthoCamera:
         axis = np.array([dy, dx, 0.0])
         self.rotation = rotation_matrix(axis, angle) @ self.rotation
 
+    def spin(self, degrees: float) -> None:
+        """Turn the view about the axis pointing at the viewer, which rotates
+        the picture in the plane of the screen without changing the pose."""
+        self.rotation = rotation_matrix(np.array([0.0, 0.0, 1.0]),
+                                        math.radians(degrees)) @ self.rotation
+
     def pan_drag(self, dx: float, dy: float, viewport_height_px: int) -> None:
         world_per_px = 2.0 * self.half_height / max(viewport_height_px, 1)
         right = self.rotation[0]   # world direction of the view x axis
