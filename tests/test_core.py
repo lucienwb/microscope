@@ -55,6 +55,45 @@ def test_water_bonds():
     assert mol.formula() == "H2O"
 
 
+def test_bonds_of_a_big_structure_match_the_pairwise_answer():
+    """The cell grid must find exactly what comparing every pair finds.
+
+    Proteins are tens of thousands of atoms, where the pairwise difference
+    array alone would be hundreds of gigabytes, so the grid is the only path
+    that runs at all — but it has to give the same bonds.
+    """
+    rng = np.random.default_rng(4)
+    lattice = np.stack(np.meshgrid(*[np.arange(12) * 1.4] * 3), -1).reshape(-1, 3)
+    coords = lattice + rng.normal(scale=0.10, size=lattice.shape)
+    mol = Molecule(["C"] * len(coords), coords)
+    bonds = mol.perceive_bonds()
+
+    radii = np.array([elements.covalent_radius(z) for z in mol.atomic_numbers])
+    dist = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)
+    cutoff = radii[:, None] + radii[None, :] + 0.45
+    ii, jj = np.where(np.triu((dist <= cutoff) & (dist > 0.4), k=1))
+    assert len(bonds) == len(ii) > 4000
+    assert (bonds == np.column_stack([ii, jj])).all()
+
+
+def test_an_atom_alone_in_its_cell_gets_no_bonds():
+    mol = Molecule(["He", "He"], np.array([[0.0, 0.0, 0.0], [40.0, 0.0, 0.0]]))
+    assert len(mol.perceive_bonds()) == 0
+
+
+def test_result_arrays_use_narrow_types():
+    """A formal charge is a single digit; the default int is eight bytes.
+
+    At protein scale these are megabytes each, so the narrowing is deliberate
+    and worth pinning down.
+    """
+    mol = Molecule(["O", "H", "H"],
+                   np.array([[0.0, 0.0, 0.117], [0.0, 0.757, -0.469],
+                             [0.0, -0.757, -0.469]]))
+    assert mol.perceive_bonds().dtype == np.int32
+    assert mol.atomic_numbers.dtype == np.int16
+
+
 def test_angle_arc_points():
     a = np.array([1.5, 0.0, 0.0])
     b = np.array([0.0, 0.0, 0.0])

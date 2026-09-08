@@ -75,11 +75,14 @@ def read(path) -> ParseResult:
             raise FileFormatError(
                 f"{path.name}: truncated cube data "
                 f"({len(data)} of {expected} values)")
-        grid = np.array(data[:expected], dtype=np.float64).reshape(*shape, nval)
+        # single precision: a cube file carries five significant digits,
+        # and a 200^3 grid is 64 MB in float64 against 32 in float32
+        grid = np.array(data[:expected], dtype=np.float32).reshape(*shape, nval)
     except (ValueError, IndexError) as exc:
         raise FileFormatError(f"{path.name}: malformed cube data") from exc
 
-    molecule = Molecule(symbols, coords, title=title or path.stem)
+    molecule = Molecule(symbols, coords, title=title or path.stem,
+                        charge_known=False)
     base_label = subtitle or title or path.stem
     volumes = []
     for k in range(nval):

@@ -23,12 +23,13 @@ def find_hbonds(molecule: Molecule, max_h_acceptor: float = 2.6,
 
     Returns a list of (h_index, acceptor_index, distance).
     """
-    if molecule.bonds is None:
-        molecule.perceive_bonds()
+    bonds = molecule.bonds
+    if bonds is None:
+        bonds = molecule.perceive_bonds()
     zs = molecule.atomic_numbers
     coords = molecule.coords
     adjacency: dict[int, set[int]] = defaultdict(set)
-    for a, b in molecule.bonds:
+    for a, b in bonds:
         adjacency[int(a)].add(int(b))
         adjacency[int(b)].add(int(a))
 

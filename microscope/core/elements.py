@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import cache
+
 # Index = atomic number; index 0 is the dummy atom "X".
 SYMBOLS = [
     "X", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -79,8 +81,13 @@ _MASSES = {
 }
 
 
+@cache
 def normalize_symbol(value) -> str:
-    """Return a canonical element symbol from a symbol string or atomic number."""
+    """Return a canonical element symbol from a symbol string or atomic number.
+
+    Cached: it is pure, the domain is a hundred-odd strings, and parsers call
+    it once per atom on structures with tens of thousands of them.
+    """
     s = str(value).strip()
     if not s:
         return "X"
@@ -109,7 +116,8 @@ def cpk_color(z: int) -> tuple[float, float, float]:
     h = _CPK_HEX.get(int(z))
     if h is None:
         return (0.75, 0.75, 0.75)
-    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    return r, g, b
 
 
 def mass(z: int) -> float:
