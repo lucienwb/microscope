@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from microscope.core import editing, geometry
+from microscope.core.history import EditHistory, Snapshot
 from microscope.core.molecule import Molecule
 
 
@@ -103,3 +104,64 @@ def test_delete_atoms():
     assert len(new.bonds) == 1
     with pytest.raises(editing.EditError):
         editing.delete_atoms(mol, [0, 1, 2])
+
+
+# --------------------------------------------------------------- edit history
+
+def _make(symbols, coords):
+    return Molecule(symbols, np.array(coords, dtype=float))
+
+
+def _snap(symbols, coords):
+    return Snapshot.of(_make(symbols, coords))
+
+
+def test_history_walks_back_and_forward():
+    history = EditHistory()
+    a = _snap(["H"], [[0.0, 0.0, 0.0]])
+    b = _snap(["H"], [[1.0, 0.0, 0.0]])
+    c = _snap(["H"], [[2.0, 0.0, 0.0]])
+    assert not history.can_undo and not history.can_redo
+
+    history.push(a)
+    history.push(b)
+    assert history.undo(c) is b            # c is where we are, b is where we go
+    assert history.undo(b) is a
+    assert history.undo(a) is None         # nothing further back
+    assert history.redo(a) is b
+    assert history.redo(b) is c
+
+
+def test_a_new_edit_discards_the_redo_branch():
+    history = EditHistory()
+    a = _snap(["H"], [[0.0, 0.0, 0.0]])
+    b = _snap(["H"], [[1.0, 0.0, 0.0]])
+    history.push(a)
+    history.undo(b)
+    assert history.can_redo
+    history.push(b)                        # edited again from here
+    assert not history.can_redo
+
+
+def test_history_forgets_the_oldest_states():
+    history = EditHistory(depth=3)
+    for x in range(10):
+        history.push(_snap(["H"], [[float(x), 0.0, 0.0]]))
+    assert len(history) == 3
+
+
+def test_a_snapshot_restores_in_place_when_the_size_matches():
+    mol = _make(["O", "H", "H"],
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]])
+    mol.perceive_bonds()
+    before = Snapshot.of(mol)
+    mol.coords[0] += 5.0
+    assert before.fits(mol)
+    before.restore_into(mol)
+    assert mol.coords[0] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_snapshot_of_a_different_size_does_not_fit():
+    small = _make(["H"], [[0.0, 0.0, 0.0]])
+    big = _make(["H", "H"], [[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])
+    assert not Snapshot.of(big).fits(small)

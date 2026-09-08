@@ -7,7 +7,8 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from ..core import editing
+from ..core import editing, measure
+from ..core.history import EditHistory, Snapshot
 from ..core.molecule import Molecule
 from ..core.volume import VolumeData
 from ..render.camera import OrthoCamera, orientation_along, orientation_from_plane
@@ -62,8 +63,7 @@ class MoleculeViewport(QOpenGLWidget):
         self._anim_base = None
         self._anim_disp = None
         self._anim_phase = 0.0
-        self._undo_stack: list[tuple] = []
-        self._redo_stack: list[tuple] = []
+        self._history = EditHistory()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)     # so gizmo handles light up on hover
         self.setMinimumSize(400, 300)
@@ -159,17 +159,7 @@ class MoleculeViewport(QOpenGLWidget):
     # ------------------------------------------------------------------ measurements
 
     def measurement_text(self) -> str:
-        if self.molecule is None or not self.selection:
-            return ""
-        if len(self.selection) == 1:
-            i = self.selection[0]
-            return f"{self.molecule.symbols[i]}{i + 1} selected"
-        if len(self.selection) > 4:
-            return f"{len(self.selection)} atoms selected"
-        tags = "–".join(f"{self.molecule.symbols[i]}{i + 1}" for i in self.selection)
-        kind = {2: "d", 3: "∠", 4: "φ"}[len(self.selection)]
-        value = annotations.measurement_value(self.molecule, self.selection)
-        return f"{kind}({tags}) = {value}"
+        return measure.describe(self.molecule, self.selection)
 
     def pin_selection(self) -> bool:
         """Keep the current 2–4 atom measurement permanently displayed."""
@@ -262,52 +252,47 @@ class MoleculeViewport(QOpenGLWidget):
 
     # ------------------------------------------------------------------ editing
 
-    def snapshot(self) -> tuple:
-        mol = self.molecule
-        return (mol.coords.copy(), list(mol.symbols),
-                None if mol.bonds is None else mol.bonds.copy())
+    def snapshot(self) -> Snapshot:
+        return Snapshot.of(self.molecule)
 
-    def apply_snapshot(self, snap: tuple) -> None:
-        coords, symbols, bonds = snap
+    def apply_snapshot(self, snap: Snapshot) -> None:
+        """Put a recorded state back, redrawing whatever it changed."""
         mol = self.molecule
-        if mol is not None and len(symbols) == mol.natoms:
-            mol.coords = coords.copy()
-            mol.symbols = list(symbols)
-            mol.bonds = None if bonds is None else bonds.copy()
+        if snap.fits(mol):
+            snap.restore_into(mol)
             self._rebuild_scene()
             self.selectionChanged.emit(self.measurement_text())
-        else:
-            new = Molecule(list(symbols), coords.copy(),
-                           charge=mol.charge if mol else 0,
-                           multiplicity=mol.multiplicity if mol else 1,
-                           title=mol.title if mol else "")
-            new.bonds = None if bonds is None else bonds.copy()
-            self.set_molecule(new, keep_camera=True)
+            return
+        # a different number of atoms: it has to become a new molecule
+        new = Molecule(list(snap.symbols), snap.coords.copy(),
+                       charge=mol.charge if mol else 0,
+                       multiplicity=mol.multiplicity if mol else 1,
+                       title=mol.title if mol else "")
+        new.bonds = None if snap.bonds is None else snap.bonds.copy()
+        self.set_molecule(new, keep_camera=True)
 
     def clear_history(self) -> None:
-        self._undo_stack.clear()
-        self._redo_stack.clear()
+        self._history.clear()
 
-    def _push_undo(self, snap: tuple | None = None) -> None:
-        self._undo_stack.append(snap if snap is not None else self.snapshot())
-        del self._undo_stack[:-100]
-        self._redo_stack.clear()
+    def _push_undo(self, snap: Snapshot | None = None) -> None:
+        self._history.push(snap if snap is not None else self.snapshot())
         self.structureEdited.emit()
 
     def undo(self) -> bool:
-        if not self._undo_stack or self.molecule is None:
-            return False
-        self.stop_animation()
-        self._redo_stack.append(self.snapshot())
-        self.apply_snapshot(self._undo_stack.pop())
-        return True
+        return self._step(self._history.undo)
 
     def redo(self) -> bool:
-        if not self._redo_stack or self.molecule is None:
+        return self._step(self._history.redo)
+
+    def _step(self, move) -> bool:
+        """Undo and redo differ only in which way they walk the history."""
+        if self.molecule is None:
+            return False
+        snap = move(self.snapshot())
+        if snap is None:
             return False
         self.stop_animation()
-        self._undo_stack.append(self.snapshot())
-        self.apply_snapshot(self._redo_stack.pop())
+        self.apply_snapshot(snap)
         return True
 
     def preview_adjust(self, base_coords, value: float,

@@ -37,7 +37,7 @@ def benzene() -> Molecule:
 
 def main() -> None:
     QGuiApplication(sys.argv)
-    args = [a for a in sys.argv[1:]]
+    args = list(sys.argv[1:])
     style_name = "cylview"
     if "--style" in args:
         k = args.index("--style")

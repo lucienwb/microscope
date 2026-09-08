@@ -2,6 +2,119 @@
 
 ## Unreleased
 
+- ruff and mypy are configured and both pass. They immediately found three
+  things the tests could not: a `self` left behind in a method extracted to a
+  module-level function, a re-exported constant an autofix had removed (which
+  broke every GUI import), and a module-level global dropped in a refactor
+  that would have failed on the first `scope -s` render
+- `ParseResult.extras` is gone; the route line and which parser read the file
+  are named fields
+- Undo/redo is `core.history` — Snapshot and EditHistory, plain data with no
+  Qt, tested on its own. What a selection measures and how it is worded is
+  `core.measure` for the same reason
+- The menu bar is `gui/menus.py`, one table of what the program can do and
+  which key does it. Adding a command is one entry there and one method on the
+  window
+- Every module is now import-tested, and the Lewis tests are split by what
+  they cover (perception, layout, files) with the shared geometries in
+  tests/molecules.py
+
+- `microscope` now has a public API: `load`, `save_molecule`, `save_lewis`,
+  `Molecule`, `ParseResult`, `perceive` and the errors worth catching, listed
+  in `__all__`. Importing it pulls in no Qt, so a script that only wants the
+  numbers never pays for graphics
+- The two largest modules are split along what they do. `gui/app.py` (922
+  lines, a window class with 42 methods plus three dialogs plus the entry
+  point) is now app.py + mainwindow.py + dialogs.py + filetypes.py, and
+  `cli.py` (741 lines) is a package: parsing, options, and one module per
+  thing `-s` can produce
+- `scope -s file.log --ir` no longer needs the Qt runtime libraries it never
+  used, and writing a `.cdxml` loads no graphics library at all
+
+- Result arrays are stored as narrowly as the data allows. The adjacency was
+  a Python list per atom holding boxed integers — 8 MB for photosystem II,
+  more than every array in the structure put together — and is now the sparse
+  (CSR) form of the bond matrix in two int32 arrays, 0.65 MB, indexed exactly
+  as before. Bonds are int32, atomic numbers int16, bond orders and formal
+  charges and lone pairs and radicals and hydrogen counts int8; coordinates
+  stay float64, since geometry is where precision matters. 13 MB down to 2.8
+- Cube grids and isosurface meshes are float32: a cube file carries five
+  significant digits and single precision holds seven. With int32 grid indices
+  and the gradient taken one axis at a time, extracting an isosurface from a
+  128^3 grid peaks at 80 MB instead of 150, with vertices still landing within
+  3e-3 A of an analytic sphere
+- Line broadening accumulates in blocks instead of building the whole
+  (grid x peaks) matrix, which for a few thousand normal modes was hundreds of
+  megabytes for a sum that never needed it. Results are bit-identical
+
+- Ions and radicals are drawn instead of merely flagged. The charge a file
+  declares was only ever compared against, never used: it now goes on the one
+  atom it can belong to when there is exactly one — a bare chloride, an ion in
+  a fragment calculation — and otherwise on **square brackets round the whole
+  drawing**, with the charge and a dot per unpaired electron outside, which is
+  how a delocalized radical cation is drawn anyway. `[divinylbenzene]•+` comes
+  out right rather than as a neutral molecule with a warning
+- Formats that never state a charge (xyz, pdb, cube, molden) say so
+  (`Molecule.charge_known`) instead of defaulting to zero and being contra-
+  dicted by every ion in the file
+- A drawing containing a metal says plainly that the charges around it are
+  bookkeeping — a dative bond drawn as a plain line has to put a charge on the
+  donor, and the balancing one belongs on the metal, which is deliberately
+  left out of the counting
+- Q-Chem ghost atoms (counterpoise centres, written `GH`) are no longer read
+  as real atoms, and a fragment job's per-fragment geometry blocks no longer
+  win over the whole system — `CH3---Na+` was arriving as one sodium atom
+
+- **Big structures now open.** Bond perception compared every pair of atoms,
+  so a protein needed an N^2 difference array — hundreds of gigabytes for a
+  crystal structure, and the process was killed. It walks a grid of cells one
+  bond wide instead, finding exactly the same bonds: photosystem II (54k
+  atoms) goes from out-of-memory to 0.1 s, and the whole draw — parse,
+  perceive, lay out — is under 3 s for every entry tried, up to 98k atoms.
+  The Lewis overlap count and `elements.normalize_symbol` had the same shape
+  of problem and got the same treatment
+- A file whose carbons are mostly short of four bonds has had its hydrogens
+  left out, the way an X-ray structure does. Formal charges are no longer
+  invented for it — a protein was drawing as tens of thousands of carbanions
+- Gaussian outputs written from a Z-matrix (older versions label the geometry
+  block "Z-Matrix orientation") are read instead of refused
+
+- **Lewis structure mode** (`Shift+L`, View → Lewis Structure): draws the
+  molecule flat and skeletal the way ChemDraw does — bare carbon vertices,
+  heteroatom labels with their hydrogens folded in (OH, NH₂, and HO– when the
+  bond leaves to the right), double and triple bonds as parallel lines with
+  the inner line inside the ring, formal charges, and lone-pair dots and
+  radical dots on request. The drawing is the molecule seen through the same
+  camera as the 3-D view, so **turning it chooses the angle the drawing is
+  made from**: line the structure up, switch over, drag to turn (Shift+drag
+  spins it in the plane of the page), then save. The mode is read-only — the
+  Edit menu is greyed out — because picking the angle is all it is for
+- Bond orders, formal charges, lone pairs and radicals are perceived from the
+  geometry (reference bond lengths per element pair, then valence saturation
+  handing out the most contracted bonds first, which is what makes a benzene
+  ring come out as a Kekulé structure; where that still strands an atom, as
+  it does on fused rings from tetracene on, an alternating chain of candidate
+  bonds is flipped to free it). Perception cannot be right for
+  everything — a carbocation and a carbanion have the same connectivity — so
+  the perceived total charge is compared against the charge in the file and
+  the status bar says so when they disagree, rather than quietly showing a
+  wrong drawing. Atoms stacked behind each other in the current view are
+  flagged the same way, since the fix is to turn the structure
+- Save the drawing for ChemDraw (File → Save for ChemDraw…, `Ctrl+Shift+S`):
+  **ChemDraw CDXML** or an **MDL molfile**, both written at the angle on
+  screen with the perceived bond orders, charges and implicit hydrogens, so
+  the structure arrives ready to rearrange rather than as a bag of atoms
+- Export the drawing as line art: PNG and TIFF as before, plus **SVG and PDF**
+  — a Lewis structure is vector art, and now stays that way in a manuscript
+- `scope -s mol.log --lewis` does all of it headless: `-o` takes an image
+  (`.png`/`.tif`), vector art (`.svg`/`.pdf`) or a structure file
+  (`.cdxml`/`.mol`), with `--show-hydrogens`, `--carbon-labels`,
+  `--lone-pairs` and `--color-atoms`. Writing a `.cdxml`/`.mol` needs no
+  graphics at all. `--lewis` without `-s` opens the viewer in that mode
+- `--spin DEG` turns the picture in the plane of the page, for the command
+  line and (as Shift+drag) in the viewer
+- File → Save As… also writes MDL molfiles (`.mol`/`.sdf`)
+
 - Spectra from the command line: `scope -s file.log --ir/--uv/--nmr` plots the
   spectrum instead of the molecule, to PNG/PDF/SVG/EPS/TIFF at `--dpi`, with
   `--fwhm`, `--freq-scale`, `--unit nm|eV`, `--nucleus`, `--reference`,

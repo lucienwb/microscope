@@ -8,8 +8,7 @@ import numpy as np
 from OpenGL import GL
 
 from .scene import SceneBuffers
-from .shaders import (CYLINDER_FRAG, CYLINDER_VERT, MESH_FRAG, MESH_VERT,
-                      SPHERE_FRAG, SPHERE_VERT)
+from .shaders import CYLINDER_FRAG, CYLINDER_VERT, MESH_FRAG, MESH_VERT, SPHERE_FRAG, SPHERE_VERT
 
 
 class RendererError(RuntimeError):

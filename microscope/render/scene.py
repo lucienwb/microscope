@@ -12,7 +12,6 @@ from ..core.molecule import Molecule
 from ..core.volume import VolumeData
 from .styles import Style
 
-
 # per-atom representations
 REP_BALL = 0     # ball-and-stick (the default "CPK" look)
 REP_STICK = 1    # bonds only, atoms shrunk to smooth tube joints

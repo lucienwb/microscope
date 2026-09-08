@@ -196,7 +196,7 @@ def _unique(indices) -> list[int]:
 
 def delete_atoms(mol: Molecule, indices) -> Molecule:
     """New Molecule with *indices* removed; bonds are re-perceived."""
-    drop = set(int(x) for x in indices)
+    drop = {int(x) for x in indices}
     keep = [x for x in range(mol.natoms) if x not in drop]
     if not keep:
         raise EditError("cannot delete every atom")

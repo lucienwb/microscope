@@ -11,10 +11,10 @@ the same publication-style annotations as the screen:
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 
-from ..core import geometry
+from ..core import geometry, measure
 from ..core.molecule import Molecule
 from ..render.camera import OrthoCamera
 
@@ -24,12 +24,8 @@ PIN_COLOR = QColor(95, 95, 95)
 
 
 def measurement_value(mol: Molecule, idxs: list[int]) -> str:
-    pts = [mol.coords[i] for i in idxs]
-    if len(idxs) == 2:
-        return f"{geometry.distance(*pts):.3f} Å"
-    if len(idxs) == 3:
-        return f"{geometry.angle(*pts):.1f}°"
-    return f"{geometry.dihedral(*pts):.1f}°"
+    """Kept as a name the painter can call; the wording lives in core.measure."""
+    return measure.value(mol, idxs)
 
 
 def overlay_metrics(height_px: int, half_height: float, scale: float = 1.0) -> dict:

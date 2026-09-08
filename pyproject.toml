@@ -26,10 +26,51 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "ruff", "mypy"]
 
 [project.scripts]
 scope = "microscope.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["microscope"]
+
+
+[tool.ruff]
+# The code sits a little under 90 columns; the handful of long lines are
+# tables and format strings that read worse when broken.
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# F is the one that earns its keep: a name used but never imported is exactly
+# what slips through when code moves between modules. E/W keep the layout
+# honest, I the import order, B and UP catch real mistakes and dated idioms.
+select = ["E", "W", "F", "I", "B", "UP", "C4"]
+ignore = [
+    "E741",    # "l" is a fine name for a line
+    "B905",    # zip(strict=) - every zip here is over arrays built together,
+               # and turning that assumption into a runtime error is a change
+               # of behaviour, not a cleanup
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]          # long assertions read better on one line
+
+[tool.mypy]
+# Everything except the widget code. PySide6's stubs make `self.style` on a
+# QWidget subclass resolve to QWidget.style(), so a viewer that keeps its own
+# style attribute draws dozens of complaints that are all the same wrong
+# answer; the rest of the package checks clean and is worth keeping that way.
+# (It found a module-level global dropped during a refactor, which the tests
+# had not: `scope -s` would have failed on its first render.)
+files = ["microscope"]
+exclude = "microscope/gui/"
+# No python_version pin: the installed numpy stubs use syntax newer than the
+# 3.10 floor in [project], and mypy refuses to parse them if told to target it.
+# Loose on purpose - this is here to catch what is unambiguous, a call that
+# cannot work or a name that cannot exist, not to enforce annotations.
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disable_error_code = ["var-annotated", "assignment", "arg-type", "index"]
