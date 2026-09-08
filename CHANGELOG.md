@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- A nitrile next to a conjugated ring kept its triple bond. Doubles are handed
+  out first, which is what makes CO2 two doubles rather than a triple and a
+  single, but it was spending the nitrile carbon's last valence on the ring
+  bond and leaving C=N with a nitrogen anion: terephthalonitrile,
+  4-cyanopyridine, tetracyanoethylene and a real fullerene dye all came out
+  that way. A bond that plainly wants a triple now claims its valence first,
+  where both atoms can afford every triple they want
+- Gaussian inputs written as a Z-matrix are read, including named variables
+  and the charge line of a counterpoise job (`0,1 0,1 0,1`);
+  `geometry.zmatrix_to_cartesian` does the conversion
+- PDB formal charges (columns 79-80) are read. They are nearly always blank,
+  but when a file states them their sum is the only charge PDB has to give
+- The viewport hands out two more of its jobs: `core.vibration.ModeAnimation`
+  is a normal mode swinging about a geometry, and `gizmo.Drag` is one drag of
+  a manipulator handle from press to release
+
 - The README shows the program working: twelve animations, one per thing it
   does - turning a structure, the two styles, labels, the axis triad,
   measuring, the manipulator, mixed representations, Lewis mode and its

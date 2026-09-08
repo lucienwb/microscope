@@ -18,10 +18,13 @@ Handles are identified by a ``(kind, index)`` pair: ``("axis", k)`` and
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QPen, QPolygonF
 
+from ..core import editing
 from ..render.camera import OrthoCamera
 
 AXIS_NAMES = ("X", "Y", "Z")
@@ -230,3 +233,71 @@ def draw(painter, camera: OrthoCamera, width: float, height: float,
     painter.setBrush(CENTER_COLOR if lit == CENTER else QColor(120, 120, 120))
     r = CENTER_RADIUS_PX + (1.5 if lit == CENTER else 0.0)
     painter.drawEllipse(QPointF(*center2d), r, r)
+
+@dataclass
+class Drag:
+    """One drag of a manipulator handle, from press to release.
+
+    The widget owns the mouse and the redraw; this owns what a drag *is* —
+    which handle, where it started, how far it has turned — and works out the
+    new coordinates from the geometry as it was when the drag began, so a
+    drag is one transform rather than an accumulation of rounding.
+    """
+
+    handle: tuple                       # ("axis" | "ring" | "center", k)
+    base: np.ndarray                    # coordinates when the drag started
+    origin: np.ndarray                  # the handle's centre, in world space
+    start_px: np.ndarray
+    snapshot: object = None             # for undo, opaque here
+    angle: float = 0.0                  # degrees turned so far
+    last_angle: float = 0.0             # previous screen angle, radians
+    moved: bool = False
+
+    @classmethod
+    def begin(cls, camera, width, height, handle, center, coords, px,
+              snapshot=None) -> Drag:
+        drag = cls(handle=handle, base=coords.copy(), origin=center,
+                   start_px=np.asarray(px, dtype=float), snapshot=snapshot)
+        if handle[0] == "ring":
+            drag.last_angle = screen_angle(camera, width, height, center,
+                                           drag.start_px)
+        return drag
+
+    def update(self, camera, width, height, molecule, selection, px,
+               snap: bool):
+        """New coordinates and a status line, or None if the move is refused.
+
+        *snap* rounds to 0.1 A and 15 degrees, the usual modifier.
+        """
+        kind, k = self.handle
+        px = np.asarray(px, dtype=float)
+        molecule.coords = self.base          # transforms read from the base
+        try:
+            if kind == "ring":
+                now = screen_angle(camera, width, height, self.origin, px)
+                self.angle += np.degrees(wrap_angle(now - self.last_angle)) \
+                    * rotation_sign(camera, k)
+                self.last_angle = now
+                value = round(self.angle / 15.0) * 15.0 if snap else self.angle
+                coords = editing.rotate_atoms(molecule, selection,
+                                              AXIS_VECTORS[k], value,
+                                              pivot=self.origin)
+                self.moved = abs(value) > 1e-9
+                return coords, f"rotate {AXIS_NAMES[k]} {value:+.1f}°"
+
+            if kind == "center":
+                delta = plane_translation(camera, height, px - self.start_px)
+                where = "in view plane"
+            else:
+                t = axis_translation(camera, width, height, self.origin, k,
+                                     px - self.start_px)
+                if snap:
+                    t = round(t / 0.1) * 0.1
+                delta = AXIS_VECTORS[k] * t
+                where = AXIS_NAMES[k]
+            coords = editing.translate_atoms(molecule, selection, delta)
+            self.moved = bool(np.linalg.norm(delta) > 1e-9)
+            return coords, f"move {where} {np.linalg.norm(delta):.3f} Å"
+        except editing.EditError:
+            molecule.coords = self.base.copy()
+            return None

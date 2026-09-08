@@ -9,7 +9,7 @@ command `scope`. Repo: https://github.com/lucienwb/microscope
 
 ```bash
 conda activate microscope          # python 3.12 env; pip install -e ".[dev]" done
-python -m pytest tests/ -q       # 247 tests, headless-safe (no GL/display needed)
+python -m pytest tests/ -q       # 258 tests, headless-safe (no GL/display needed)
 ruff check microscope tests scripts    # lint; mypy   # types, gui excluded
 scope <file>                     # launch the GUI
 scope -s <file> -o fig.png ...   # silent mode: render a figure, no window
@@ -50,7 +50,11 @@ Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/
   bonds first — plain greedy strands two atoms of a six-ring and draws
   benzene with two double bonds, so ties go to the most constrained bond,
   and whatever greed still strands (fused rings from tetracene on) is
-  rescued by flipping an alternating chain of candidate bonds (_augment);
+  rescued by flipping an alternating chain of candidate bonds (_augment).
+  A bond that plainly wants a triple claims its valence before the doubles
+  are handed out, but only where both atoms can afford every triple they
+  want - that is what keeps CO2 two doubles while a nitrile next to a ring
+  keeps its triple instead of leaving a nitrogen anion;
   LewisStructure.matches_file compares the perceived charge with the file's
   and the UI warns when they differ, unless Molecule.charge_known is False
   because the format never states one (xyz/pdb/cube/molden); a charge the
@@ -67,7 +71,8 @@ Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/
   rotate_atoms and connected_fragment used by the manipulator),
   contacts (H-bond detection), history.py (Snapshot + EditHistory: undo/redo
   as plain data, no Qt), measure.py (what a 2-4 atom selection measures and
-  how it is worded),
+  how it is worded), vibration.py (ModeAnimation: a normal mode swinging
+  about a geometry; the viewport keeps only the timer),
   volume.py (VolumeData grids), isosurface.py (vectorized marching
   tetrahedra + gradient normals), results dataclasses, elements data.
   Pure numpy, no Qt.

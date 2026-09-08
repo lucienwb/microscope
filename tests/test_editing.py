@@ -8,6 +8,7 @@ import pytest
 from microscope.core import editing, geometry
 from microscope.core.history import EditHistory, Snapshot
 from microscope.core.molecule import Molecule
+from microscope.core.vibration import ModeAnimation
 
 
 def ethane() -> Molecule:
@@ -165,3 +166,36 @@ def test_a_snapshot_of_a_different_size_does_not_fit():
     small = _make(["H"], [[0.0, 0.0, 0.0]])
     big = _make(["H", "H"], [[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])
     assert not Snapshot.of(big).fits(small)
+
+# ----------------------------------------------------------------- vibration
+
+def test_a_mode_swings_about_the_geometry_it_started_from():
+    base = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]])
+    disp = np.array([[0.0, 0.0, -0.5], [0.0, 0.0, 0.5]])
+    anim = ModeAnimation.of(base, disp)
+    assert anim is not None
+    assert anim.at(0.0) == pytest.approx(base)                  # through zero
+    out = anim.at(np.pi / 2)                                    # full stretch
+    assert out[1, 2] - out[0, 2] == pytest.approx(1.1 + 2 * 0.35)
+    assert anim.at(np.pi) == pytest.approx(base)
+
+
+def test_the_biggest_displacement_sets_the_amplitude():
+    base = np.zeros((2, 3))
+    anim = ModeAnimation.of(base, np.array([[0.0, 0.0, 4.0], [0.0, 0.0, 1.0]]),
+                            amplitude=0.35)
+    assert np.abs(anim.at(np.pi / 2)).max() == pytest.approx(0.35)
+
+
+def test_a_mode_that_cannot_be_animated_says_so():
+    base = np.zeros((2, 3))
+    assert ModeAnimation.of(base, None) is None
+    assert ModeAnimation.of(base, np.zeros((3, 3))) is None     # wrong shape
+    assert ModeAnimation.of(base, np.zeros((2, 3))) is None     # no motion
+
+
+def test_stepping_advances_the_phase():
+    anim = ModeAnimation.of(np.zeros((1, 3)), np.array([[0.0, 0.0, 1.0]]))
+    first, second = anim.step(), anim.step()
+    assert anim.phase == pytest.approx(0.6)
+    assert second[0, 2] > first[0, 2] > 0.0

@@ -10,6 +10,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from ..core import editing, measure
 from ..core.history import EditHistory, Snapshot
 from ..core.molecule import Molecule
+from ..core.vibration import AMPLITUDE, ModeAnimation
 from ..core.volume import VolumeData
 from ..render.camera import OrthoCamera, orientation_along, orientation_from_plane
 from ..render.glrenderer import MoleculeRenderer
@@ -50,19 +51,10 @@ class MoleculeViewport(QOpenGLWidget):
         self._overlay_ok = True
         self.show_gizmo = True          # manipulator on the current selection
         self.show_axes = False          # world orientation triad in the corner
-        self._gizmo_hover = None
-        self._gizmo_drag = None         # handle being dragged
-        self._drag_base = None          # coords when the drag started
-        self._drag_snapshot = None
-        self._drag_origin = None        # gizmo centre at drag start (world)
-        self._drag_start_px = None
-        self._drag_angle = 0.0          # accumulated rotation, degrees
-        self._drag_last_angle = 0.0     # last screen angle, radians
-        self._drag_moved = False
+        self._gizmo_hover = None    # handle the pointer is over
         self._anim_timer: QTimer | None = None
-        self._anim_base = None
-        self._anim_disp = None
-        self._anim_phase = 0.0
+        self._animation: ModeAnimation | None = None
+        self._drag: gizmo.Drag | None = None
         self._history = EditHistory()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)     # so gizmo handles light up on hover
@@ -183,20 +175,16 @@ class MoleculeViewport(QOpenGLWidget):
     def is_animating(self) -> bool:
         return self._anim_timer is not None and self._anim_timer.isActive()
 
-    def animate_mode(self, displacements, amplitude: float = 0.35) -> bool:
+    def animate_mode(self, displacements, amplitude: float = AMPLITUDE) -> bool:
         """Animate a normal mode: coords oscillate along *displacements*."""
         self.stop_animation()
-        if self.molecule is None or displacements is None:
+        if self.molecule is None:
             return False
-        d = np.asarray(displacements, dtype=float)
-        if d.shape != self.molecule.coords.shape:
+        animation = ModeAnimation.of(self.molecule.coords, displacements,
+                                     amplitude)
+        if animation is None:
             return False
-        peak = np.abs(d).max()
-        if peak < 1e-9:
-            return False
-        self._anim_base = self.molecule.coords.copy()
-        self._anim_disp = d / peak * amplitude
-        self._anim_phase = 0.0
+        self._animation = animation
         if self._anim_timer is None:
             self._anim_timer = QTimer(self)
             self._anim_timer.timeout.connect(self._anim_tick)
@@ -206,15 +194,13 @@ class MoleculeViewport(QOpenGLWidget):
     def stop_animation(self) -> None:
         if self.is_animating:
             self._anim_timer.stop()
-            if self.molecule is not None and self._anim_base is not None:
-                self.molecule.coords = self._anim_base
+            if self.molecule is not None and self._animation is not None:
+                self.molecule.coords = self._animation.base
                 self._rebuild_scene()
-        self._anim_base = None
-        self._anim_disp = None
+        self._animation = None
 
     def _anim_tick(self):
-        self._anim_phase += 0.3
-        self.molecule.coords = self._anim_base + np.sin(self._anim_phase) * self._anim_disp
+        self.molecule.coords = self._animation.step()
         self._rebuild_scene()
 
     def _rebuild_scene(self):
@@ -376,6 +362,11 @@ class MoleculeViewport(QOpenGLWidget):
         self.show_axes = bool(on)
         self.update()
 
+    @property
+    def _gizmo_drag(self):
+        """Which handle is being dragged, for the overlay and the event code."""
+        return None if self._drag is None else self._drag.handle
+
     def _gizmo_center(self):
         if not self.gizmo_visible:
             return None
@@ -390,59 +381,19 @@ class MoleculeViewport(QOpenGLWidget):
 
     def _begin_gizmo_drag(self, handle, pos) -> None:
         self.stop_animation()
-        self._gizmo_drag = handle
-        self._drag_snapshot = self.snapshot()
-        self._drag_base = self.molecule.coords.copy()
-        self._drag_origin = self._gizmo_center()
-        self._drag_start_px = np.array([pos.x(), pos.y()], dtype=float)
-        self._drag_angle = 0.0
-        self._drag_moved = False
-        if handle[0] == "ring":
-            self._drag_last_angle = gizmo.screen_angle(
-                self.camera, self.width(), self.height(), self._drag_origin,
-                self._drag_start_px)
+        self._drag = gizmo.Drag.begin(
+            self.camera, self.width(), self.height(), handle,
+            self._gizmo_center(), self.molecule.coords,
+            (pos.x(), pos.y()), snapshot=self.snapshot())
 
     def _update_gizmo_drag(self, pos, snap: bool) -> None:
-        kind, k = self._gizmo_drag
-        px = np.array([pos.x(), pos.y()], dtype=float)
-        w, h = self.width(), self.height()
-        mol = self.molecule
-        mol.coords = self._drag_base            # transforms read from the base
-        try:
-            if kind == "ring":
-                ang = gizmo.screen_angle(self.camera, w, h, self._drag_origin, px)
-                step = gizmo.wrap_angle(ang - self._drag_last_angle)
-                self._drag_last_angle = ang
-                self._drag_angle += np.degrees(step) * gizmo.rotation_sign(
-                    self.camera, k)
-                value = self._drag_angle
-                if snap:
-                    value = round(value / 15.0) * 15.0
-                coords = editing.rotate_atoms(mol, self.selection,
-                                              gizmo.AXIS_VECTORS[k], value,
-                                              pivot=self._drag_origin)
-                self._drag_moved = abs(value) > 1e-9
-                message = f"rotate {gizmo.AXIS_NAMES[k]} {value:+.1f}°"
-            else:
-                if kind == "center":
-                    delta = gizmo.plane_translation(self.camera, h,
-                                                    px - self._drag_start_px)
-                else:
-                    t = gizmo.axis_translation(self.camera, w, h,
-                                               self._drag_origin, k,
-                                               px - self._drag_start_px)
-                    if snap:
-                        t = round(t / 0.1) * 0.1
-                    delta = gizmo.AXIS_VECTORS[k] * t
-                coords = editing.translate_atoms(mol, self.selection, delta)
-                self._drag_moved = bool(np.linalg.norm(delta) > 1e-9)
-                message = ("move " + ("in view plane" if kind == "center"
-                                      else gizmo.AXIS_NAMES[k])
-                           + f" {np.linalg.norm(delta):.3f} Å")
-        except editing.EditError:
-            mol.coords = self._drag_base.copy()
+        outcome = self._drag.update(self.camera, self.width(), self.height(),
+                                    self.molecule, self.selection,
+                                    (pos.x(), pos.y()), snap)
+        if outcome is None:
             return
-        mol.coords = coords
+        coords, message = outcome
+        self.molecule.coords = coords
         self._rebuild_scene()
         self.selectionChanged.emit(
             f"{len(self.selection)} atom(s): {message}"
@@ -450,14 +401,9 @@ class MoleculeViewport(QOpenGLWidget):
             f"{self.measurement_text()}  ·  {message}")
 
     def _end_gizmo_drag(self) -> None:
-        if self._drag_moved and self._drag_snapshot is not None:
-            self._push_undo(self._drag_snapshot)
-        self._gizmo_drag = None
-        self._drag_base = None
-        self._drag_snapshot = None
-        self._drag_origin = None
-        self._drag_start_px = None
-        self._drag_moved = False
+        if self._drag is not None and self._drag.moved:
+            self._push_undo(self._drag.snapshot)
+        self._drag = None
         self.selectionChanged.emit(self.measurement_text())
         self.update()
 
