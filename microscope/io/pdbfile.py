@@ -12,8 +12,19 @@ from ..core.results import ParseResult
 from .errors import FileFormatError
 
 
+def _formal_charge(line: str) -> int:
+    """Columns 79-80: a digit then a sign, as in "1+" or "2-"; usually blank."""
+    field = line[78:80].strip() if len(line) >= 79 else ""
+    if len(field) == 2 and field[0].isdigit() and field[1] in "+-":
+        return int(field[0]) * (1 if field[1] == "+" else -1)
+    if len(field) == 2 and field[1].isdigit() and field[0] in "+-":
+        return int(field[1]) * (1 if field[0] == "+" else -1)
+    return 0
+
+
 def read(path) -> ParseResult:
     symbols, coords = [], []
+    charges = []
     for line in Path(path).read_text(errors="replace").splitlines():
         if line.startswith(("ATOM  ", "HETATM")):
             try:
@@ -28,12 +39,17 @@ def read(path) -> ParseResult:
                 elem = "".join(ch for ch in name if ch.isalpha())
             symbols.append(elements.normalize_symbol(elem))
             coords.append([x, y, z])
+            charges.append(_formal_charge(line))
         elif line.startswith("ENDMDL") and symbols:
             break
     if not symbols:
         raise FileFormatError(f"{path}: no ATOM/HETATM records found")
+    # PDB has no molecular charge; it has a per-atom one that is almost
+    # always blank. When some atoms do carry it, their sum is the best
+    # statement of the charge the file makes.
+    declared = any(charges)
     mol = Molecule(symbols, np.array(coords), title=Path(path).stem,
-                   charge_known=False)
+                   charge=sum(charges), charge_known=declared)
     return ParseResult(frames=[mol], program="PDB", source=str(path))
 
 

@@ -124,3 +124,46 @@ def rotation_matrix(axis: np.ndarray, angle_rad: float) -> np.ndarray:
         [t * x * y + s * z, t * y * y + c,     t * y * z - s * x],
         [t * x * z - s * y, t * y * z + s * x, t * z * z + c],
     ])
+
+def zmatrix_to_cartesian(entries) -> np.ndarray:
+    """Internal coordinates to Cartesian, in the order Z-matrices are written.
+
+    Each entry is ``(r_ref, r, a_ref, angle, d_ref, dihedral)`` with 0-based
+    references to earlier atoms and angles in degrees; the leading atoms use
+    however many of those they have. The first goes to the origin, the second
+    along z, the third into the xz plane, and the rest are placed by the usual
+    construction: step out along the bond from its reference, in the frame the
+    angle and dihedral describe.
+    """
+    coords = np.zeros((len(entries), 3))
+    for k, (r_ref, r, a_ref, angle, d_ref, dihedral) in enumerate(entries):
+        if k == 0:
+            continue
+        if k == 1:
+            coords[1] = (0.0, 0.0, r)
+            continue
+        if k == 2:
+            theta = np.radians(angle)
+            other = coords[a_ref]
+            axis = 1.0 if coords[r_ref][2] <= other[2] else -1.0
+            coords[2] = coords[r_ref] + (r * np.sin(theta), 0.0,
+                                         axis * r * np.cos(theta))
+            continue
+        theta, phi = np.radians(angle), np.radians(dihedral)
+        a, b, c = coords[d_ref], coords[a_ref], coords[r_ref]
+        u = c - b
+        u /= np.linalg.norm(u)
+        n = np.cross(a - b, u)
+        norm = np.linalg.norm(n)
+        if norm < 1e-9:                     # three references in a line
+            n = np.cross(u, (1.0, 0.0, 0.0))
+            norm = np.linalg.norm(n)
+            if norm < 1e-9:
+                n = np.cross(u, (0.0, 1.0, 0.0))
+                norm = np.linalg.norm(n)
+        n /= norm
+        m = np.cross(u, n)
+        coords[k] = c + r * (-np.cos(theta) * u
+                             + np.sin(theta) * np.cos(phi) * m
+                             + np.sin(theta) * np.sin(phi) * n)
+    return coords

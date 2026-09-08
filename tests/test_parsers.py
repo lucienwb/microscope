@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import microscope.io as mio
+from microscope.core import geometry
 from microscope.io import fchk, gaussian, orca, qchem
 
 DATA = Path(__file__).parent / "data"
@@ -291,3 +292,46 @@ def test_formats_without_a_charge_field_say_so(tmp_path):
     xyz = tmp_path / "m.xyz"
     xyz.write_text("2\ntitle\nO 0.0 0.0 0.0\nH 0.96 0.0 0.0\n")
     assert not mio.load(xyz).molecule.charge_known
+
+def test_gaussian_z_matrix_input(tmp_path):
+    """Internal coordinates, the way Gaussian test decks are written."""
+    job = tmp_path / "water.com"
+    job.write_text("#p hf/sto-3g\n\nwater\n\n0 1\nO\nH 1 0.956\n"
+                   "H 1 0.956 2 104.5\n\n")
+    mol = mio.load(job).molecule
+    assert mol.symbols == ["O", "H", "H"]
+    assert geometry.distance(mol.coords[0], mol.coords[1]) == pytest.approx(0.956)
+    assert geometry.angle(mol.coords[1], mol.coords[0],
+                          mol.coords[2]) == pytest.approx(104.5)
+
+
+def test_gaussian_z_matrix_with_named_variables(tmp_path):
+    job = tmp_path / "water.com"
+    job.write_text("#n hf/sto-3g\n\nwater\n\n0 1\nO1\nH2  1  r2\n"
+                   "H3  1  r3  2  a3\n\nr2=0.9732\nr3=0.9641\na3=105.9\n\n")
+    mol = mio.load(job).molecule
+    assert geometry.distance(mol.coords[0], mol.coords[1]) == pytest.approx(0.9732)
+    assert geometry.angle(mol.coords[1], mol.coords[0],
+                          mol.coords[2]) == pytest.approx(105.9)
+
+
+def test_a_dihedral_in_a_z_matrix_comes_back_out(tmp_path):
+    job = tmp_path / "butane.com"
+    job.write_text("#n hf\n\nb\n\n0 1\nC\nC 1 1.53\nC 2 1.53 1 111.0\n"
+                   "C 3 1.53 2 111.0 1 60.0\n\n")
+    mol = mio.load(job).molecule
+    assert geometry.dihedral(*mol.coords[::-1]) == pytest.approx(60.0)
+
+
+def test_pdb_reads_the_formal_charge_columns(tmp_path):
+    """Columns 79-80 are usually blank, but they are the only charge PDB has."""
+    plain = tmp_path / "plain.pdb"
+    plain.write_text("HETATM    1  N   UNL     1       0.000   0.000   0.000"
+                     "  1.00  0.00           N\n")
+    assert not mio.load(plain).molecule.charge_known
+
+    charged = tmp_path / "charged.pdb"
+    charged.write_text("HETATM    1  N   UNL     1       0.000   0.000   0.000"
+                       "  1.00  0.00           N1+\n")
+    mol = mio.load(charged).molecule
+    assert mol.charge == 1 and mol.charge_known

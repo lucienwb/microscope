@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..core import elements
+from ..core import elements, geometry
 from ..core.molecule import Molecule
 from ..core.results import ExcitedState, NMRShielding, ParseResult, Vibration
 from .errors import FileFormatError
@@ -197,6 +197,44 @@ def _parse_freq_block(lines: list[str], i: int, vibrations: list[Vibration]) -> 
     return j
 
 
+def _zmatrix_entries(rows, variables):
+    """Z-matrix rows to (ref, value, ...) tuples, resolving named variables.
+
+    A row names an earlier atom and a distance, then optionally another atom
+    and an angle, then a third and a dihedral. Values may be numbers or names
+    defined in the variables block that follows the geometry.
+    """
+    def number(token):
+        sign = -1.0 if token.startswith("-") else 1.0
+        name = token.lstrip("+-")
+        if name in variables:
+            return sign * variables[name]
+        return float(token)
+
+    entries = []
+    for k, parts in enumerate(rows):
+        fields = [0, 0.0, 0, 0.0, 0, 0.0]
+        for slot, (ref_at, val_at) in enumerate(((0, 1), (2, 3), (4, 5))):
+            if k > slot and len(parts) > val_at:
+                fields[2 * slot] = int(parts[ref_at]) - 1      # 1-based in the file
+                fields[2 * slot + 1] = number(parts[val_at])
+        entries.append(tuple(fields))
+    return entries
+
+
+def _zmatrix_variables(lines, start: int) -> dict:
+    """The  block Gaussian writes after a Z-matrix geometry."""
+    values = {}
+    for line in lines[start:]:
+        parts = line.replace("=", " ").split()
+        if len(parts) == 2:
+            try:
+                values[parts[0]] = float(parts[1])
+            except ValueError:
+                continue
+    return values
+
+
 def read_gjf(path) -> ParseResult:
     lines = Path(path).read_text(errors="replace").splitlines()
     n = len(lines)
@@ -221,37 +259,51 @@ def read_gjf(path) -> ParseResult:
     i += 1
     if i >= n:
         raise FileFormatError(f"{path}: truncated Gaussian input")
-    parts = lines[i].split()
+    # "0 1", or "0,1 0,1 0,1" for a counterpoise job: the first pair is the
+    # whole system, the rest are its fragments
+    parts = lines[i].replace(",", " ").split()
     try:
         charge, mult = int(parts[0]), int(parts[1])
     except (ValueError, IndexError) as exc:
         raise FileFormatError(f"{path}: bad charge/multiplicity line {lines[i]!r}") from exc
     i += 1
-    symbols, coords = [], []
+    symbols, rows = [], []
     while i < n and lines[i].strip():
         parts = lines[i].split()
-        if len(parts) < 4:
-            break
         m = re.match(r"[A-Za-z]{1,2}|\d{1,3}", parts[0])
         if not m:
             raise FileFormatError(f"{path}: cannot read atom line {lines[i]!r}")
-        sym = m.group(0)
-        vals = parts[1:]
-        # optional freeze-code integer column after the element
-        if len(vals) >= 4 and "." not in vals[0] and vals[0].lstrip("-").isdigit():
-            vals = vals[1:]
-        try:
-            xyz = [float(v) for v in vals[:3]]
-        except ValueError as exc:
-            raise FileFormatError(
-                f"{path}: only Cartesian input is supported (Z-matrix line {lines[i]!r})"
-            ) from exc
-        symbols.append(sym)
-        coords.append(xyz)
+        symbols.append(m.group(0))
+        rows.append(parts[1:])
         i += 1
     if not symbols:
         raise FileFormatError(f"{path}: no atoms found")
-    mol = Molecule(symbols, np.array(coords), charge=charge, multiplicity=mult,
+
+    # A geometry block is one thing or the other, and the first atom settles
+    # it: in a Z-matrix it is the bare element symbol, with nothing to place
+    # it against yet.
+    if rows[0]:
+        coords = []
+        for sym, vals in zip(symbols, rows):
+            # optional freeze-code integer column after the element
+            if len(vals) >= 4 and "." not in vals[0] and vals[0].lstrip("-").isdigit():
+                vals = vals[1:]
+            try:
+                coords.append([float(v) for v in vals[:3]])
+            except (ValueError, IndexError) as exc:
+                raise FileFormatError(
+                    f"{path}: cannot read the coordinates of {sym}") from exc
+        coords = np.array(coords)
+    else:
+        variables = _zmatrix_variables(lines, i)
+        try:
+            coords = geometry.zmatrix_to_cartesian(
+                _zmatrix_entries(rows, variables))
+        except (ValueError, IndexError, KeyError) as exc:
+            raise FileFormatError(
+                f"{path}: cannot read this Z-matrix ({exc})") from exc
+
+    mol = Molecule(symbols, coords, charge=charge, multiplicity=mult,
                    title=" ".join(title_lines))
     result = ParseResult(frames=[mol], program="Gaussian input", source=str(path))
     if route_lines:
