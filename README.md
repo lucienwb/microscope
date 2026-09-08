@@ -334,6 +334,9 @@ needs a working OpenGL 3.3 driver.
   de Sherbrooke) — this project is an independent implementation.
 - Parser test fixtures in `tests/data/` come from the **cclib** project's
   test suite (BSD-3-Clause); see `tests/data/README.md`.
+- Much of the code was written with **[Claude Code](https://claude.com/claude-code)**
+  (Anthropic). The chemistry, the design decisions and the review are the
+  maintainer's.
 
 ## License
 
