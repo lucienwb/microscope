@@ -227,8 +227,8 @@ def layout(structure: LewisStructure, camera: OrthoCamera,
         warnings.append("no hydrogens in this file — formal charges are not "
                         "shown, since the geometry cannot say")
     if _has_metal(structure):
-        warnings.append("a metal is present — its bonds are drawn as plain "
-                        "lines, so the charges around it are bookkeeping")
+        warnings.append("a metal is present — its ligands are counted as ions, "
+                        "so the charge on the metal is its oxidation state")
     if not structure.matches_file:
         warnings.append(
             f"perceived charge {structure.total_charge:+d} does not match the "
@@ -248,10 +248,11 @@ def layout(structure: LewisStructure, camera: OrthoCamera,
 def _has_metal(structure: LewisStructure) -> bool:
     """Is anything here outside the main group?
 
-    A dative bond drawn as a plain line puts a formal charge on the donor and
-    the balancing one on the metal, which is kept out of the bookkeeping — so
-    the charges around a metal say more about the drawing convention than
-    about the molecule, and the viewer should be told.
+    Around a metal the charges follow the ionic convention: a ligand is
+    counted without its bond to the metal, so a phosphine stays neutral
+    rather than becoming a phosphonium, and whatever the ligands do not
+    account for goes on the metal as its oxidation state. That is a choice
+    of convention, and the viewer should know which one it is looking at.
     """
     return any(not is_main_group(int(z))
                for z in structure.molecule.atomic_numbers)

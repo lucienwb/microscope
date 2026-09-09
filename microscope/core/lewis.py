@@ -210,11 +210,18 @@ def perceive(molecule: Molecule) -> LewisStructure:
     neighbors = Adjacency(n, bonds)
 
     orders = _assign_orders(molecule, bonds, z, symbols, neighbors)
-    bonded = _bonded_totals(bonds, orders, n)
+    metal = ~_MAIN_GROUP_BY_Z[np.clip(z, 0, 118)]
+    bonded = _bonded_totals(bonds, orders, n, metal if metal.any() else None)
 
     # int8 throughout: a formal charge is a single digit, a lone-pair count
     # smaller still, and at 100k atoms the default int is four megabytes
-    charges, lone_pairs, radicals = _electron_bookkeeping(z, bonded)
+    attached = np.zeros(n, dtype=bool)
+    if metal.any():
+        attached[bonds[metal[bonds[:, 1]], 0]] = True
+        attached[bonds[metal[bonds[:, 0]], 1]] = True
+    charges, lone_pairs, radicals = _electron_bookkeeping(z, bonded, attached)
+    if metal.any():
+        _metal_charge(z, charges, bonds, molecule)
 
     absent = _hydrogens_are_missing(z, bonded)
     if absent:
@@ -239,11 +246,38 @@ def perceive(molecule: Molecule) -> LewisStructure:
                           net_charge=net_charge, net_radicals=net_radicals)
 
 
-def _bonded_totals(bonds, orders, natoms: int) -> np.ndarray:
-    """Sum of bond orders at each atom."""
+def _bonded_totals(bonds, orders, natoms: int, metal=None) -> np.ndarray:
+    """Sum of bond orders at each atom.
+
+    With *metal* given, a bond to a metal is left out of the ligand's count.
+    That is ionic (oxidation-state) counting, and it is what stops a phosphine
+    donating to palladium from being drawn as a phosphonium cation: the pair
+    in a dative bond belongs to the donor, so the donor keeps it.
+    """
     counts = orders.astype(np.int32)
-    return (np.bincount(bonds[:, 0], counts, minlength=natoms)
-            + np.bincount(bonds[:, 1], counts, minlength=natoms)).astype(np.int16)
+    i, j = bonds[:, 0], bonds[:, 1]
+    if metal is None:
+        return (np.bincount(i, counts, minlength=natoms)
+                + np.bincount(j, counts, minlength=natoms)).astype(np.int16)
+    return (np.bincount(i, counts * ~metal[j], minlength=natoms)
+            + np.bincount(j, counts * ~metal[i], minlength=natoms)).astype(np.int16)
+
+
+def _metal_charge(z, charges, bonds, molecule) -> None:
+    """Put whatever the ligands do not account for on the metal.
+
+    Counted this way that number is the metal's oxidation state, which is what
+    a chemist wants to read off a complex - Rh(+1) on a hydroformylation
+    catalyst, Mn(+1) on a pincer carbonyl. It needs a charge to balance
+    against and somewhere unambiguous to put it, so it is only done for a
+    single metal in a file that states its charge.
+    """
+    metals = [a for a in range(len(z)) if not is_main_group(int(z[a]))]
+    if len(metals) != 1 or not molecule.charge_known:
+        return
+    balance = int(molecule.charge) - int(charges.sum())
+    if abs(balance) <= 8:                     # anything wilder is not an ion
+        charges[metals[0]] = balance
 
 
 def _hydrogen_counts(z, bonds, natoms: int) -> np.ndarray:
@@ -265,7 +299,7 @@ _SHELL_BY_Z = np.array([_SHELL.get(zi, 8) for zi in range(119)], dtype=np.int16)
 _MAIN_GROUP_BY_Z = np.array([is_main_group(zi) for zi in range(119)], dtype=bool)
 
 
-def _electron_bookkeeping(z, bonded):
+def _electron_bookkeeping(z, bonded, attached=None):
     """Formal charges, lone pairs and unpaired electrons, from the bond orders.
 
     A free atom keeps all its electrons and is neutral; a bonded one fills its
@@ -273,10 +307,15 @@ def _electron_bookkeeping(z, bonded):
     its formal charge. Metals are left out of it entirely.
     """
     idx = np.clip(z, 0, 118)
+    if attached is None:
+        attached = np.zeros(len(z), dtype=bool)
     electrons = _VALENCE_BY_Z[idx]
     shell = _SHELL_BY_Z[idx]
     main = _MAIN_GROUP_BY_Z[idx]
-    free = main & (bonded == 0)
+    # An atom bonded only to metals - a halide, a hydride, an oxo - is that
+    # ligand as its own ion, not a free atom in space.
+    bare = main & (bonded == 0) & attached
+    free = main & (bonded == 0) & ~attached
     held = main & (bonded > 0)
 
     lone_pairs = np.zeros(len(z), dtype=np.int8)
@@ -284,6 +323,8 @@ def _electron_bookkeeping(z, bonded):
     charges = np.zeros(len(z), dtype=np.int8)
     lone_pairs[free] = electrons[free] // 2
     radicals[free] = electrons[free] % 2
+    lone_pairs[bare] = shell[bare] // 2
+    charges[bare] = electrons[bare] - shell[bare]
     lone_pairs[held] = np.maximum(0, (shell[held] - 2 * bonded[held]) // 2)
     charges[held] = electrons[held] - 2 * lone_pairs[held] - bonded[held]
     return charges, lone_pairs, radicals

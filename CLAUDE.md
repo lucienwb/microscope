@@ -9,7 +9,7 @@ command `scope`. Repo: https://github.com/lucienwb/microscope
 
 ```bash
 conda activate microscope          # python 3.12 env; pip install -e ".[dev]" done
-python -m pytest tests/ -q       # 258 tests, headless-safe (no GL/display needed)
+python -m pytest tests/ -q       # 260 tests, headless-safe (no GL/display needed)
 ruff check microscope tests scripts    # lint; mypy   # types, gui excluded
 scope <file>                     # launch the GUI
 scope -s <file> -o fig.png ...   # silent mode: render a figure, no window
@@ -72,7 +72,16 @@ Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/
   where LewisStructure.net_charge/net_radicals put it on square brackets the
   way a delocalized radical cation is drawn. Metal complexes are left out of
   that: their mismatch comes from drawing dative bonds as plain lines, and
-  the drawing says so instead. A file whose carbons are mostly short of four
+  the drawing says so instead. Around a metal the charges follow the ionic
+  (oxidation-state) convention: a ligand is counted without its bond to the
+  metal, so a phosphine keeps its lone pair and stays neutral instead of
+  becoming a phosphonium, an atom bonded only to metals is that ligand as its
+  own ion (Cl-, H-, oxo 2-), and whatever the ligands do not account for goes
+  on the metal, where it reads as the oxidation state - Rh(+1) on a
+  hydroformylation catalyst, Mn(+1) on a pincer carbonyl, Mo(+4) on MoOCl4 2-.
+  It needs one metal and a stated charge to have somewhere unambiguous to put
+  it; with two metals the drawing says it could not. A file whose carbons are
+  mostly short of four
   bonds has had its hydrogens left out, as X-ray structures do, and then no
   formal charges are claimed at all — otherwise a protein draws as tens of
   thousands of carbanions), geometry, editing (fragment-aware

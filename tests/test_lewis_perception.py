@@ -125,10 +125,11 @@ def test_a_format_that_states_no_charge_is_never_contradicted():
 
 
 def test_a_perception_that_disagrees_with_the_file_says_so():
-    # a metal complex: the charge cannot be reconciled and is not guessed at
-    salt = _molecule(["Mo", "Cl"], [[0.0, 0.0, 0.0], [2.40, 0.0, 0.0]], charge=-2)
+    # two metals: the leftover charge has nowhere unambiguous to go
+    salt = _molecule(["Mo", "Mo", "Cl"],
+                     [[0.0, 0.0, 0.0], [2.6, 0.0, 0.0], [1.3, 2.2, 0.0]],
+                     charge=-3)
     structure = lewis.perceive(salt)
-    assert structure.total_charge == 0
     assert not structure.matches_file
 
 
@@ -164,8 +165,55 @@ def test_a_metal_carbonyl_keeps_its_triple_bond():
                     [[0.0, 0, 0], [1.79, 0, 0], [2.96, 0, 0]])
     structure = lewis.perceive(mol)
     assert structure.order_of(1, 2) == 3
-    assert int(structure.charges[1]) == 0
-    assert int(structure.charges[2]) == +1        # the metal takes no charge
+    # counted without its bond to the metal the carbonyl is free CO, C- to O+
+    assert int(structure.charges[1]) == -1
+    assert int(structure.charges[2]) == +1
+    # C- and O+ already balance, so this fragment leaves the metal at zero
+    assert int(structure.charges[0]) == 0
+    assert structure.matches_file
+
+
+def test_a_metal_takes_the_oxidation_state_the_ligands_leave():
+    """A halide bonded only to a metal is that ligand as its own ion.
+
+    Molybdenum oxytetrachloride: four chlorides and an oxo make -6, and the
+    file says the whole thing is -2, so the metal is Mo(IV).
+    """
+    angles = np.arange(4) * np.pi / 2.0
+    chlorides = np.column_stack([2.30 * np.cos(angles), 2.30 * np.sin(angles),
+                                 np.zeros(4)])
+    mol = _molecule(["Mo", "O"] + ["Cl"] * 4,
+                    np.vstack([[0, 0, 0], [0, 0, 1.66], chlorides]), charge=-2)
+    structure = lewis.perceive(mol)
+    assert int(structure.charges[0]) == +4        # Mo(IV)
+    assert int(structure.charges[1]) == -2        # oxo
+    assert list(structure.charges[2:]) == [-1] * 4
+    assert structure.matches_file
+
+
+def test_a_donor_is_not_drawn_as_a_cation():
+    """A phosphine donating to a metal keeps its lone pair, so it stays neutral.
+
+    Drawn as a plain line with covalent counting it would be a phosphonium,
+    and the balancing minus would belong on the metal, which is not how a
+    complex is drawn.
+    """
+    mol = _molecule(["Pd", "P", "H", "H", "H"],
+                    [[0.0, 0, 0], [2.30, 0, 0], [2.85, 1.20, 0],
+                     [2.85, -0.60, 1.04], [2.85, -0.60, -1.04]])
+    structure = lewis.perceive(mol)
+    assert int(structure.charges[1]) == 0         # the phosphorus
+    assert int(structure.charges[0]) == 0         # and so Pd(0)
+    assert structure.matches_file
+
+
+def test_several_metals_leave_the_charge_unplaced():
+    """With more than one metal there is nowhere unambiguous to put it."""
+    mol = _molecule(["Fe", "Fe", "Cl"],
+                    [[0, 0, 0], [2.5, 0, 0], [1.25, 2.1, 0]], charge=-3)
+    structure = lewis.perceive(mol)
+    assert not structure.charges[:2].any()        # neither metal is charged
+    assert not structure.matches_file             # and the drawing says so
 
 
 def test_a_file_without_hydrogens_claims_no_charges():
@@ -185,12 +233,6 @@ def test_a_molecule_that_really_has_no_hydrogens_keeps_its_charges():
     assert not structure.hydrogens_missing
     assert structure.total_charge == -1
 
-
-def test_metals_are_left_out_of_the_bookkeeping():
-    complexed = _molecule(["Mo", "Cl"], [[0, 0, 0], [2.4, 0, 0]])
-    structure = lewis.perceive(complexed)
-    assert structure.charges[0] == 0 and structure.lone_pairs[0] == 0
-    assert int(structure.orders[0]) == 1
 
 def test_a_nitrile_keeps_its_triple_next_to_a_ring():
     """The double pass runs first and can spend the carbon's last valence.

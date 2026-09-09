@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Metal complexes are drawn the way an organometallic paper draws them. A
+  dative bond shown as a plain line used to make a phosphine into a
+  phosphonium, and the balancing minus belonged on a metal that was kept out
+  of the counting, so a Mn pincer came out as +5 against a file that said 0.
+  Ligands are now counted without their bonds to the metal - the pair in a
+  dative bond belongs to the donor - an atom bonded only to metals is that
+  ligand as its own ion, and the remainder goes on the metal, where it reads
+  as the oxidation state. All 109 metal complexes in the test corpus now
+  reconcile with the charge their file states, and nothing without a metal
+  changed at all
+
 - Lewis perception is about four times faster on a protein (0.51 s to 0.12 s
   for photosystem II): bond lengths are computed in one call rather than one
   per bond, bonds are grouped by which pair of elements they join so the

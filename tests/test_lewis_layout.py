@@ -132,18 +132,20 @@ def test_stacked_atoms_are_reported_so_the_view_can_be_turned():
 
 
 def test_a_disputed_charge_is_carried_into_the_drawing():
-    salt = _molecule(["Mo", "Cl"], [[0.0, 0.0, 0.0], [2.40, 0.0, 0.0]], charge=-2)
+    salt = _molecule(["Mo", "Mo", "Cl"],
+                     [[0.0, 0.0, 0.0], [2.6, 0.0, 0.0], [1.3, 2.2, 0.0]],
+                     charge=-3)
     plan = lewis2d.layout(lewis.perceive(salt), _camera(salt), W, H)
     assert any("does not match" in w for w in plan.warnings)
 
 
-def test_a_metal_says_its_charges_are_only_bookkeeping():
-    # true whatever the charge works out to: the note has to appear even for a
-    # format that never declares one, where there is no charge to disagree with
+def test_a_metal_names_the_convention_its_charges_follow():
+    # the note has to appear even where there is no charge to disagree with,
+    # because which convention the drawing uses is the thing worth saying
     salt = _molecule(["Mo", "Cl"], [[0.0, 0.0, 0.0], [2.40, 0.0, 0.0]])
     salt.charge_known = False
     plan = lewis2d.layout(lewis.perceive(salt), _camera(salt), W, H)
-    assert any("bookkeeping" in w for w in plan.warnings)
+    assert any("oxidation state" in w for w in plan.warnings)
     assert not any("does not match" in w for w in plan.warnings)
 
 
