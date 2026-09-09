@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from . import elements
 from .molecule import Molecule
 
 # Reference bond lengths in Angstrom: (single, double, triple), None where the
@@ -209,27 +210,11 @@ def perceive(molecule: Molecule) -> LewisStructure:
     neighbors = Adjacency(n, bonds)
 
     orders = _assign_orders(molecule, bonds, z, symbols, neighbors)
-    bonded = np.zeros(n, dtype=np.int16)              # sum of bond orders
-    for order, (i, j) in zip(orders, bonds):
-        bonded[i] += order
-        bonded[j] += order
+    bonded = _bonded_totals(bonds, orders, n)
 
     # int8 throughout: a formal charge is a single digit, a lone-pair count
     # smaller still, and at 100k atoms the default int is four megabytes
-    charges = np.zeros(n, dtype=np.int8)
-    lone_pairs = np.zeros(n, dtype=np.int8)
-    radicals = np.zeros(n, dtype=np.int8)
-    for a in range(n):
-        if not is_main_group(z[a]):                   # metals: no bookkeeping
-            continue
-        electrons = VALENCE_ELECTRONS[int(z[a])]
-        if bonded[a] == 0:                            # a free atom is neutral
-            lone_pairs[a] = electrons // 2
-            radicals[a] = electrons % 2
-            continue
-        shell = _SHELL.get(int(z[a]), 8)
-        lone_pairs[a] = max(0, (shell - 2 * int(bonded[a])) // 2)
-        charges[a] = electrons - 2 * lone_pairs[a] - int(bonded[a])
+    charges, lone_pairs, radicals = _electron_bookkeeping(z, bonded)
 
     absent = _hydrogens_are_missing(z, bonded)
     if absent:
@@ -246,14 +231,62 @@ def perceive(molecule: Molecule) -> LewisStructure:
     net_charge, net_radicals = _reconcile(molecule, z, charges, lone_pairs,
                                           radicals, neighbors)
 
-    hydrogens = np.array(
-        [sum(1 for j in neighbors[a] if symbols[j] == "H") for a in range(n)],
-        dtype=np.int8)
+    hydrogens = _hydrogen_counts(z, bonds, n)
     return LewisStructure(molecule=molecule, bonds=bonds, orders=orders,
                           charges=charges, lone_pairs=lone_pairs,
                           radicals=radicals, hydrogens=hydrogens,
                           neighbors=neighbors, hydrogens_missing=absent,
                           net_charge=net_charge, net_radicals=net_radicals)
+
+
+def _bonded_totals(bonds, orders, natoms: int) -> np.ndarray:
+    """Sum of bond orders at each atom."""
+    counts = orders.astype(np.int32)
+    return (np.bincount(bonds[:, 0], counts, minlength=natoms)
+            + np.bincount(bonds[:, 1], counts, minlength=natoms)).astype(np.int16)
+
+
+def _hydrogen_counts(z, bonds, natoms: int) -> np.ndarray:
+    """Hydrogens attached to each atom."""
+    counts = np.zeros(natoms, dtype=np.int8)
+    for near, far in ((0, 1), (1, 0)):
+        hydrogen = z[bonds[:, far]] == 1
+        counts += np.bincount(bonds[hydrogen, near],
+                              minlength=natoms).astype(np.int8)
+    return counts
+
+
+# Per-element constants as arrays indexed by atomic number, so the electron
+# count below is arithmetic over every atom at once rather than a dict lookup
+# for each of a protein's hundred thousand.
+_VALENCE_BY_Z = np.array([VALENCE_ELECTRONS.get(zi, 0) for zi in range(119)],
+                         dtype=np.int16)
+_SHELL_BY_Z = np.array([_SHELL.get(zi, 8) for zi in range(119)], dtype=np.int16)
+_MAIN_GROUP_BY_Z = np.array([is_main_group(zi) for zi in range(119)], dtype=bool)
+
+
+def _electron_bookkeeping(z, bonded):
+    """Formal charges, lone pairs and unpaired electrons, from the bond orders.
+
+    A free atom keeps all its electrons and is neutral; a bonded one fills its
+    shell around the bonds it has, and whatever the count comes to short is
+    its formal charge. Metals are left out of it entirely.
+    """
+    idx = np.clip(z, 0, 118)
+    electrons = _VALENCE_BY_Z[idx]
+    shell = _SHELL_BY_Z[idx]
+    main = _MAIN_GROUP_BY_Z[idx]
+    free = main & (bonded == 0)
+    held = main & (bonded > 0)
+
+    lone_pairs = np.zeros(len(z), dtype=np.int8)
+    radicals = np.zeros(len(z), dtype=np.int8)
+    charges = np.zeros(len(z), dtype=np.int8)
+    lone_pairs[free] = electrons[free] // 2
+    radicals[free] = electrons[free] % 2
+    lone_pairs[held] = np.maximum(0, (shell[held] - 2 * bonded[held]) // 2)
+    charges[held] = electrons[held] - 2 * lone_pairs[held] - bonded[held]
+    return charges, lone_pairs, radicals
 
 
 def _reconcile(molecule, z, charges, lone_pairs, radicals, neighbors):
@@ -314,45 +347,73 @@ def _hydrogens_are_missing(z, bonded) -> bool:
     return short > len(carbons) // 2
 
 
+def _bond_lengths(coords, bonds) -> np.ndarray:
+    """Every bond length at once — one call, not one per bond."""
+    delta = coords[bonds[:, 0]] - coords[bonds[:, 1]]
+    return np.sqrt(np.einsum("ij,ij->i", delta, delta))
+
+
+def _wanted_orders(z, bonds, lengths):
+    """The order each bond's length is closest to, and how contracted it is.
+
+    Bonds are grouped by which pair of elements they join, so the reference
+    lengths are looked up once per pair rather than once per bond: a protein
+    has tens of thousands of bonds and perhaps twenty distinct pairs.
+    """
+    wanted = np.ones(len(bonds), dtype=np.int8)
+    contraction = np.ones(len(bonds))
+    za, zb = z[bonds[:, 0]].astype(np.int32), z[bonds[:, 1]].astype(np.int32)
+    key = np.minimum(za, zb) * 256 + np.maximum(za, zb)
+    for k in np.unique(key):
+        refs = reference_lengths(elements.SYMBOLS[k // 256],
+                                 elements.SYMBOLS[k % 256])
+        if refs is None:
+            continue
+        here = key == k
+        d = lengths[here]
+        available = [(order, ref) for order, ref in enumerate(refs, start=1)
+                     if ref is not None]
+        errors = np.stack([np.abs(d - ref) for _, ref in available])
+        # argmin takes the first on a tie, which is the lower order, exactly
+        # as the tuple comparison it replaces did
+        wanted[here] = np.array([o for o, _ in available])[errors.argmin(axis=0)]
+        contraction[here] = d / refs[0]
+    return wanted, contraction
+
+
+# Indexed by atomic number: how many bonds an atom may hold, 0 for anything
+# outside the main group, so capacity is a lookup rather than a loop.
+_CAPACITY_BY_Z = np.array(
+    [max_bonds(zi) if is_main_group(zi) else 0 for zi in range(119)],
+    dtype=np.int16)
+
+
+def _capacity(z, degree) -> np.ndarray:
+    """How many further bond orders each atom can take (0 for the metals)."""
+    top = _CAPACITY_BY_Z[np.clip(z, 0, len(_CAPACITY_BY_Z) - 1)]
+    return np.maximum(0, top - degree).astype(np.int16)
+
+
 def _assign_orders(molecule, bonds, z, symbols, neighbors) -> np.ndarray:
     """Bond orders from bond lengths, capped by the valence left on each atom."""
     orders = np.ones(len(bonds), dtype=np.int8)
     if not len(bonds):
         return orders
 
-    coords = molecule.coords
-    wanted = np.ones(len(bonds), dtype=np.int8)
-    contraction = np.ones(len(bonds))                 # d / single-bond length
-    for b, (i, j) in enumerate(bonds):
-        refs = reference_lengths(symbols[i], symbols[j])
-        if refs is None:
-            continue
-        d = float(np.linalg.norm(coords[i] - coords[j]))
-        by_closeness = [(abs(d - ref), order)
-                        for order, ref in enumerate(refs, start=1)
-                        if ref is not None]
-        wanted[b] = min(by_closeness)[1]
-        contraction[b] = d / refs[0]
-
-    capacity = np.array(
-        [max(0, max_bonds(z[a]) - len(neighbors[a])) if is_main_group(z[a]) else 0
-         for a in range(molecule.natoms)], dtype=np.int16)
+    lengths = _bond_lengths(molecule.coords, bonds)
+    wanted, contraction = _wanted_orders(z, bonds, lengths)
+    capacity = _capacity(z, np.diff(neighbors.offsets).astype(np.int16))
 
     # A bond that plainly wants a triple claims its valence before the doubles
     # are handed out, but only where both atoms can afford every triple they
     # want. Carbon dioxide's carbon wants two and can afford one, so it falls
     # through to the double pass and comes out O=C=O; a nitrile carbon wants
     # one and can afford it, so it is not left as C=N with a nitrogen anion.
-    demand = np.zeros(molecule.natoms, dtype=np.int16)
-    for b in range(len(bonds)):
-        if wanted[b] >= 3:
-            demand[bonds[b][0]] += 1
-            demand[bonds[b][1]] += 1
-    for b in range(len(bonds)):
-        i, j = bonds[b]
-        if wanted[b] >= 3 and 2 * demand[i] <= capacity[i] \
-                and 2 * demand[j] <= capacity[j]:
-            orders[b] = 3
+    triple = wanted >= 3
+    demand = (np.bincount(bonds[triple, 0], minlength=molecule.natoms)
+              + np.bincount(bonds[triple, 1], minlength=molecule.natoms))
+    affordable = 2 * demand <= capacity
+    orders[triple & affordable[bonds[:, 0]] & affordable[bonds[:, 1]]] = 3
 
     for target in (2, 3):
         candidates = [b for b in range(len(bonds))
@@ -372,11 +433,11 @@ def _assign_orders(molecule, bonds, z, symbols, neighbors) -> np.ndarray:
 
 def _spare(capacity, bonds, orders) -> np.ndarray:
     """Valence each atom has left once the multiple bonds so far are counted."""
-    spare = capacity.copy()
-    for order, (i, j) in zip(orders, bonds):
-        spare[i] -= order - 1
-        spare[j] -= order - 1
-    return spare
+    extra = (orders - 1).astype(np.int32)
+    n = len(capacity)
+    return (capacity
+            - np.bincount(bonds[:, 0], extra, minlength=n)
+            - np.bincount(bonds[:, 1], extra, minlength=n)).astype(np.int16)
 
 
 def _augment(bonds, orders, spare, candidates, target) -> bool:

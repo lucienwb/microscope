@@ -40,6 +40,15 @@ Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/
   is an Adjacency: CSR-style offsets+flat int32 arrays, i.e. the sparse form of
   the symmetric bond matrix, indexed like the list of lists it replaced. On
   photosystem II that is 13 MB of result arrays down to 2.8.
+- Perception is array work, not per-atom Python: bond lengths in one call,
+  bonds grouped by element pair so the reference lengths are looked up once
+  per pair rather than once per bond, valence/charge/lone-pair counts through
+  arrays indexed by atomic number, and bincount wherever something is summed
+  onto atoms. That is 4x on a protein. Two things were tried and rejected
+  with numbers: scipy's cKDTree finds the same bonds 1.4x faster but costs
+  more to import (0.25 s) than it saves, and visiting only the forward half
+  of each cell's neighbourhood made bond perception 3.5x *slower*, because
+  one large numpy block per cell beats fourteen small ones.
 - `core/` — Molecule (bond perception through a grid of cells one bond wide,
   not an N^2 pairwise pass — a protein is tens of thousands of atoms and the
   difference array alone would be hundreds of gigabytes; elements.py memoizes

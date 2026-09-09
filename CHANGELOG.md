@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Lewis perception is about four times faster on a protein (0.51 s to 0.12 s
+  for photosystem II): bond lengths are computed in one call rather than one
+  per bond, bonds are grouped by which pair of elements they join so the
+  reference lengths are looked up once per pair, and the valence, charge and
+  lone-pair counts are arrays indexed by atomic number instead of a dict
+  lookup per atom. Output is unchanged - checked by hashing the perception
+  and layout of all 441 corpus structures before and after
+
 - A nitrile next to a conjugated ring kept its triple bond. Doubles are handed
   out first, which is what makes CO2 two doubles rather than a triple and a
   single, but it was spending the nitrile carbon's last valence on the ring

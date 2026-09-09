@@ -15,6 +15,7 @@ rather than shrinking as a bond swings edge-on.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -329,7 +330,7 @@ def _place_bonds(structure, atoms, hidden, shown, scale) -> list[Bond2D]:
             continue
         a, b = atoms[i], atoms[j]
         v = b.pos - a.pos
-        length = float(np.linalg.norm(v))
+        length = math.hypot(v[0], v[1])       # a two-vector: no numpy needed
         bond = Bond2D(i=i, j=j, order=order)
         bonds.append(bond)
         if length < 1e-6:                       # atoms exactly on top of each other
@@ -352,7 +353,8 @@ def _place_bonds(structure, atoms, hidden, shown, scale) -> list[Bond2D]:
                 half = perp * gap / 2.0
                 bond.lines = [(start + half, end + half), (start - half, end - half)]
             else:
-                inset = u * float(np.linalg.norm(end - start)) * INNER_INSET
+                span = end - start
+                inset = u * math.hypot(span[0], span[1]) * INNER_INSET
                 offset = perp * gap * side
                 bond.lines = [(start, end),
                               (start + offset + inset, end + offset - inset)]
@@ -370,7 +372,7 @@ def _inner_side(atoms, shown, i: int, j: int, perp: np.ndarray):
             return None                      # a terminal double bond stays centred
         for n in neighbours:
             d = atoms[n].pos - atoms[a].pos
-            norm = float(np.linalg.norm(d))
+            norm = math.hypot(d[0], d[1])
             if norm > 1e-9:
                 lean += d / norm
     projection = float(np.dot(lean, perp))
