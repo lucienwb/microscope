@@ -17,7 +17,7 @@ from ..core.molecule import Molecule
 from ..render.camera import OrthoCamera, orientation_along, orientation_from_plane
 from ..render.formats import IMAGE_SUFFIXES, PLOT_SUFFIXES, VECTOR_SUFFIXES
 from ..render.scene import REP_BALL, REP_LINE, REP_STICK
-from ..render.styles import make_style
+from ..render.styles import StyleError, make_style
 
 REP_CODES = {"ball": REP_BALL, "stick": REP_STICK, "line": REP_LINE}
 LABEL_MODES = ("none", "element", "element+number", "number")
@@ -233,7 +233,12 @@ def _spin(camera: OrthoCamera, rx: float, ry: float) -> None:
 
 
 def build_style(args):
-    style = make_style(args.style)
+    try:
+        style = make_style(args.style)
+    except StyleError as exc:
+        raise CliError(str(exc)) from None
+    except OSError:
+        raise CliError(f"--style: no preset or file called {args.style!r}") from None
     if args.background:
         style.background = parse_color(args.background)
     if args.bond_color:

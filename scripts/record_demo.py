@@ -277,7 +277,36 @@ def lewis_options():
     _save(frames, "lewis_options.gif", ms=110)
 
 
-CLIPS = {f.__name__: f for f in (orbit, styles, regions, labels, measure,
+def style():
+    """Ctrl+T: atom size, bond width and element colours, changing live."""
+    _, mol = _load("trp.log")
+    cam = _camera(mol)
+    cam.rotate_drag(-40, -30)
+    start, end = make_style("cylview"), make_style("cylview")
+    end.atom_scale, end.bond_radius = 0.52, 0.10
+    end.bond_color = (0.10, 0.10, 0.10)
+    end.palette = {**end.palette, 6: (0.16, 0.42, 0.55), 7: (0.90, 0.62, 0.15),
+                   8: (0.80, 0.25, 0.45)}
+
+    def mix(t):
+        step = make_style("cylview")
+        step.atom_scale = start.atom_scale + t * (end.atom_scale - start.atom_scale)
+        step.bond_radius = start.bond_radius + t * (end.bond_radius - start.bond_radius)
+        step.bond_color = None if t < 0.5 else end.bond_color
+        step.palette = {z: tuple(a + t * (b - a) for a, b in
+                                 zip(start.palette.get(z, c), end.palette.get(z, c)))
+                        for z, c in end.palette.items()}
+        return step
+
+    frames = []
+    for t in list(np.linspace(0, 1, 14)) + [1.0] * 6 + list(np.linspace(1, 0, 8)):
+        image = render_molecule_image(mol, mix(float(t)), cam, W, H,
+                                      supersample=2, transparent=False)
+        frames.append(_to_pil(image))
+    _save(frames, "style.gif", ms=90)
+
+
+CLIPS = {f.__name__: f for f in (orbit, styles, style, regions, labels, measure,
                                  handles, axes, isosurface, vibrate,
                                  trajectory, lewis, lewis_options)}
 

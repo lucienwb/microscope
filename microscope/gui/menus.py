@@ -130,6 +130,8 @@ def build_menus(window):
         lewis_menu.addAction(action)
         window._lewis_options[option] = action
 
+    add_action(window, view_menu, "&Style…", "Ctrl+T", window.edit_style)
+
     view_menu.addSeparator()
     add_action(window, view_menu, "&Align View to Selection", "A", window._align_view)
     add_action(window, view_menu, "&Center on Selected Atom", "C", window._center_atom)

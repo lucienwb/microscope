@@ -36,3 +36,5 @@ def with_extension(path: str, chosen: str, defaults: dict) -> str:
         if chosen.startswith(name):
             return path + ext
     return path
+
+STYLE_FILTER = "microscope style (*.json);;All files (*)"

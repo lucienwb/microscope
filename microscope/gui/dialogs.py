@@ -6,6 +6,8 @@ and changed without the main window in view.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -15,16 +17,20 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSlider,
     QSpinBox,
     QWidget,
 )
 
-from ..core import geometry
+from ..core import elements, geometry
+from ..render.styles import StyleError, load_style, save_style
+from .filetypes import STYLE_FILTER
 from .viewport import MoleculeViewport
 
 # Curated isosurface color pairs (+ lobe, - lobe); custom colors via the picker.
@@ -257,3 +263,202 @@ class SurfaceDialog(QDialog):
         if self.palette_box.findText("Custom") < 0:
             self.palette_box.addItem("Custom")
         self.palette_box.setCurrentIndex(self.palette_box.findText("Custom"))
+
+def _swatch(button: QPushButton, rgb) -> None:
+    """Paint a colour button with the colour it stands for."""
+    colour = QColor.fromRgbF(*rgb) if rgb is not None else QColor(255, 255, 255)
+    edge = "#888" if rgb is not None else "#ccc"
+    button.setStyleSheet(
+        f"background-color: {colour.name()}; border: 1px solid {edge};")
+
+
+class StyleDialog(QDialog):
+    """Edit the rendering style, live, and keep it as a file.
+
+    The point of the file is a group standard: save it once, then both the
+    viewer and `scope -s --style ours.json` draw every figure the same way.
+    Only the elements actually in the open structure get a colour button —
+    a periodic table of them would be a worse way to find carbon.
+    """
+
+    def __init__(self, viewport: MoleculeViewport, parent=None):
+        super().__init__(parent)
+        self.viewport = viewport
+        self.setWindowTitle("Style")
+        layout = QFormLayout(self)
+
+        self.preset = QComboBox()
+        self.preset.addItems(["cylview", "houk"])
+        if viewport.style.name in ("cylview", "houk"):
+            self.preset.setCurrentText(viewport.style.name)
+        else:
+            self.preset.addItem(viewport.style.name)
+            self.preset.setCurrentText(viewport.style.name)
+        self.preset.activated.connect(self._preset_chosen)
+        layout.addRow("Start from:", self.preset)
+
+        self.atom_scale = self._slider(layout, "Atom size:", 10, 100,
+                                       viewport.style.atom_scale * 100,
+                                       lambda v: self._set(atom_scale=v / 100.0))
+        self.bond_radius = self._slider(layout, "Bond width:", 2, 40,
+                                        viewport.style.bond_radius * 100,
+                                        lambda v: self._set(bond_radius=v / 100.0))
+
+        self.background = QPushButton()
+        self.background.setFixedSize(56, 22)
+        self.background.clicked.connect(self._pick_background)
+        layout.addRow("Background:", self.background)
+
+        self.uniform_bonds = QCheckBox("one colour for every bond")
+        self.uniform_bonds.setChecked(viewport.style.bond_color is not None)
+        self.uniform_bonds.toggled.connect(self._uniform_toggled)
+        self.bond_colour = QPushButton()
+        self.bond_colour.setFixedSize(56, 22)
+        self.bond_colour.clicked.connect(self._pick_bond_colour)
+        bonds = QWidget()
+        row = QHBoxLayout(bonds)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.uniform_bonds)
+        row.addWidget(self.bond_colour)
+        row.addStretch(1)
+        layout.addRow("Bonds:", bonds)
+
+        self.hbonds = QCheckBox("show hydrogen bonds")
+        self.hbonds.setChecked(viewport.style.show_hbonds)
+        self.hbonds.toggled.connect(lambda on: self._set(show_hbonds=bool(on)))
+        layout.addRow("", self.hbonds)
+
+        self.elements = QWidget()
+        self.element_row = QHBoxLayout(self.elements)
+        self.element_row.setContentsMargins(0, 0, 0, 0)
+        layout.addRow("Elements:", self.elements)
+        self._build_element_buttons()
+
+        buttons = QDialogButtonBox()
+        buttons.addButton("&Load…", QDialogButtonBox.ButtonRole.ResetRole
+                          ).clicked.connect(self._load)
+        buttons.addButton("&Save As…", QDialogButtonBox.ButtonRole.ApplyRole
+                          ).clicked.connect(self._save)
+        buttons.addButton(QDialogButtonBox.StandardButton.Close
+                          ).clicked.connect(self.close)
+        layout.addRow(buttons)
+        self._refresh()
+
+    # ------------------------------------------------------------------ parts
+
+    def _slider(self, layout, label, low, high, value, on_change):
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(low, high)
+        slider.setValue(int(round(value)))
+        slider.valueChanged.connect(on_change)
+        layout.addRow(label, slider)
+        return slider
+
+    def _build_element_buttons(self) -> None:
+        while self.element_row.count():
+            self.element_row.takeAt(0).widget().deleteLater()
+        self.element_buttons = {}
+        molecule = self.viewport.molecule
+        present = sorted({int(z) for z in molecule.atomic_numbers}) if molecule else []
+        for z in present[:12]:                      # a long row helps nobody
+            button = QPushButton(elements.SYMBOLS[z])
+            button.setFixedSize(38, 22)
+            button.clicked.connect(lambda _=False, z=z: self._pick_element(z))
+            self.element_row.addWidget(button)
+            self.element_buttons[z] = button
+        self.element_row.addStretch(1)
+
+    # ----------------------------------------------------------------- edits
+
+    def _set(self, **changes) -> None:
+        for key, value in changes.items():
+            setattr(self.viewport.style, key, value)
+        self.viewport.refresh_style()
+        self._refresh()
+
+    def _preset_chosen(self, _index: int) -> None:
+        name = self.preset.currentText()
+        if name in ("cylview", "houk"):
+            self.viewport.set_representation(name)
+            self._sync_controls()
+
+    def _uniform_toggled(self, on: bool) -> None:
+        self._set(bond_color=(0.07, 0.07, 0.07) if on else None)
+
+    def _pick_background(self) -> None:
+        self._ask_colour(self.viewport.style.background,
+                         lambda rgb: self._set(background=rgb))
+
+    def _pick_bond_colour(self) -> None:
+        if self.viewport.style.bond_color is None:
+            self.uniform_bonds.setChecked(True)
+        self._ask_colour(self.viewport.style.bond_color,
+                         lambda rgb: self._set(bond_color=rgb))
+
+    def _pick_element(self, z: int) -> None:
+        def apply(rgb):
+            palette = dict(self.viewport.style.palette)
+            palette[z] = rgb
+            self._set(palette=palette)
+        self._ask_colour(self.viewport.style.atom_color(z), apply)
+
+    def _ask_colour(self, current, apply) -> None:
+        start = QColor.fromRgbF(*current) if current else QColor(0, 0, 0)
+        chosen = QColorDialog.getColor(start, self, "Choose a colour")
+        if chosen.isValid():
+            apply((chosen.redF(), chosen.greenF(), chosen.blueF()))
+
+    # ------------------------------------------------------------------ files
+
+    def _save(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Save style", "style.json",
+                                              STYLE_FILTER)
+        if not path:
+            return
+        style = self.viewport.style
+        if style.name in ("cylview", "houk"):
+            style.name = Path(path).stem
+        save_style(path, style)
+        self.preset.setCurrentText(style.name) if self.preset.findText(
+            style.name) >= 0 else self.preset.addItem(style.name)
+        self.preset.setCurrentText(style.name)
+
+    def _load(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Open style", "", STYLE_FILTER)
+        if not path:
+            return
+        try:
+            style = load_style(path)
+        except StyleError as exc:
+            QMessageBox.warning(self, "Could not read that style", str(exc))
+            return
+        self.viewport.apply_style(style)
+        if self.preset.findText(style.name) < 0:
+            self.preset.addItem(style.name)
+        self.preset.setCurrentText(style.name)
+        self._sync_controls()
+
+    # ---------------------------------------------------------------- display
+
+    def _sync_controls(self) -> None:
+        style = self.viewport.style
+        for slider, value in ((self.atom_scale, style.atom_scale * 100),
+                              (self.bond_radius, style.bond_radius * 100)):
+            slider.blockSignals(True)
+            slider.setValue(int(round(value)))
+            slider.blockSignals(False)
+        self.uniform_bonds.blockSignals(True)
+        self.uniform_bonds.setChecked(style.bond_color is not None)
+        self.uniform_bonds.blockSignals(False)
+        self.hbonds.blockSignals(True)
+        self.hbonds.setChecked(style.show_hbonds)
+        self.hbonds.blockSignals(False)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        style = self.viewport.style
+        _swatch(self.background, style.background)
+        _swatch(self.bond_colour, style.bond_color)
+        self.bond_colour.setEnabled(style.bond_color is not None)
+        for z, button in self.element_buttons.items():
+            _swatch(button, style.atom_color(z))

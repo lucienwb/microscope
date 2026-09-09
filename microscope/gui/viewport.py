@@ -222,6 +222,21 @@ class MoleculeViewport(QOpenGLWidget):
             self.atom_reps[:] = rep
         self._rebuild_scene()
 
+    def refresh_style(self) -> None:
+        """Redraw after the style object has been edited in place."""
+        if self.molecule is not None:
+            self._rebuild_scene()
+        self._update_surface()
+        self.update()
+
+    def apply_style(self, style: Style) -> None:
+        """Adopt a whole style, keeping the isosurface the user set up."""
+        style.surface_positive = self.style.surface_positive
+        style.surface_negative = self.style.surface_negative
+        style.surface_opacity = self.style.surface_opacity
+        self.style = style
+        self.refresh_style()
+
     def set_representation(self, name: str) -> None:
         """Switch style preset (cylview / houk), keeping user adjustments."""
         if name == self.style.name:

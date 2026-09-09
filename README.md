@@ -11,46 +11,30 @@ figures ready for a paper.
 
 ![tryptophan rendered by microscope](docs/screenshot_trp.png)
 
-## Highlights
+## What it does
 
-- **CYLview-look rendering** — ray-cast impostor spheres/cylinders (never
-  faceted), split-color bonds, orthographic camera, high-resolution export
-  to transparent PNG or uncompressed TIFF
-- **Houk (Houkmol) style** — one key (`V`) switches to the classic Houk-group
-  look: glossy ball-and-stick with black bonds, near-white carbons and the
-  signature quadrant seam lines on every heavy atom, readable even in
-  black-and-white printouts
-- **Lewis structure mode** — `Shift+L` redraws the molecule flat and
-  skeletal the way ChemDraw does, with double bonds, charges and (on request)
-  lone pairs. Turning it picks the angle the drawing is made from; save the
-  picture, or save a **ChemDraw `.cdxml`/`.mol`** to keep editing there
-- **Mixed representations** — select a region and give it its own level of
-  detail: ball-and-stick for the important part (`1`), sticks for the
-  surroundings (`2`), thin lines for the rest (`3`)
-- **One viewer for all programs** — Gaussian / ORCA / Q-Chem outputs are
-  recognized by content and parsed natively (no cclib dependency)
-- **Interactive spectra** — click an IR band and *watch the molecule vibrate*;
-  UV-Vis and NMR with adjustable broadening, scaling and referencing
-- **Orbital & density isosurfaces** — open a cube file and the surface appears,
-  with live isovalue/opacity/color controls (in-house marching-tetrahedra
-  mesher; preset color pairs or any custom RGB/HEX color)
-- **Drag to move and rotate** — select an atom or a whole fragment and a
-  manipulator appears on it: coloured X/Y/Z arrows slide it, three rings turn
-  it, the centre dot moves it in the screen plane (hold Shift to snap to
-  0.1 Å / 15°). Everything is undoable
-- **Measure & edit** — publication-style measurement annotations (distance
-  written along the bond, angles marked with an arc, dihedrals with a
-  rotation arrow around the central bond); fragment-aware geometry
-  adjustment with live preview and undo/redo
-- **Trajectories** — optimization/IRC/scan playback with energies
-- **Batch figures from the shell** — `scope -s mycalc.log --style houk
-  --view 30,-15 -o fig.png` renders without opening a window, so figures
-  regenerate from a script like a gnuplot plot
-- **Whole proteins, not just molecules** — bonds are found through a grid of
-  cells rather than by comparing every pair, so a 98,000-atom PDB entry parses
-  and draws in a few seconds instead of exhausting memory
-- **Scriptable** — `import microscope` gives you the parsers and writers with
-  no graphics attached, so a script that only wants numbers never starts Qt
+Every row links to the section that shows it working.
+
+| | |
+|---|---|
+| [**Turn it**](#turning-and-framing) | rotate, pan, zoom, look down a bond, into a plane |
+| [**Two looks**](#two-looks) | the CYLview render, or the Houk (Houkmol) ball-and-stick |
+| [**Your own look**](#your-own-style) | a style you edit and save, shared by the viewer and the shell |
+| [**Label it**](#labels-and-axes) | element, number, both; a corner XYZ triad |
+| [**Measure it**](#selecting-and-measuring) | distances, angles, dihedrals, drawn the way a paper draws them |
+| [**Move it**](#moving-atoms-by-hand) | drag a fragment along an axis or turn it, with undo |
+| [**Detail where it matters**](#mixed-representations) | ball-and-stick here, sticks there, lines for the rest |
+| [**Draw it flat**](#lewis-structures) | ChemDraw-style Lewis structures, out to `.cdxml`, `.mol`, SVG |
+| [**Orbitals**](#orbitals-and-densities) | cube files, live isovalue and colours |
+| [**Watch it move**](#trajectories-and-vibrations) | optimizations and IRCs, and normal modes animating |
+| [**Spectra**](#spectra) | IR, UV-Vis, NMR — click a band to see the mode |
+| [**From a script**](#the-command-line) | `scope -s` renders figures with no window, like gnuplot |
+| [**From Python**](#python-api) | the parsers and writers, with no graphics attached |
+
+It reads Gaussian, ORCA and Q-Chem outputs (recognized by content, not
+extension), `xyz`, `pdb`, `fchk`, Molden and cube files, with every parser
+written in-house. Structures up to about a hundred thousand atoms open in a
+few seconds, so a PDB entry is as ordinary as a small molecule.
 
 ## Install
 
@@ -81,28 +65,62 @@ scope -s mycalc.log   # no window: render mycalc.png and exit
 
 ## The viewer
 
-### Looking at a structure
+Each thing it does, and what it looks like doing it.
 
-Left-drag turns it, right-drag pans, the wheel zooms. `A` with two atoms
-selected looks straight down that bond; with three, it puts their plane in the
-screen. `C` rotates about the selected atom, `Home` re-centres, `Ctrl+R`
-starts over.
+### Turning and framing
+
+Left-drag turns, right-drag pans, the wheel zooms. `A` with two atoms selected
+looks straight down that bond; with three, it puts their plane in the screen.
+`C` rotates about the selected atom, `Home` re-centres, `Ctrl+R` starts over.
 
 ![turning a molecule](docs/orbit.gif)
 
-`V` switches between the CYLview look — ray-cast spheres and cylinders, never
-faceted, split-colour bonds — and the **Houk (Houkmol)** style: glossy
-ball-and-stick with black bonds, near-white carbons and the signature quadrant
-seam lines that stay readable in a black-and-white printout.
+### Two looks
 
-![the CYLview look and the Houk style](docs/styles.gif)
-![the same molecule rendered in the Houk style](docs/screenshot_houk.png)
+`V` switches between the **CYLview** render — ray-cast spheres and cylinders,
+never faceted, split-colour bonds — and the **Houk (Houkmol)** style: glossy
+ball-and-stick with black bonds, near-white carbons and the quadrant seam
+lines that stay readable in a black-and-white printout.
 
-`L` cycles the atom labels — element, element+number, number, off — and
-`Shift+A` puts a triad of the world axes in the corner, which turns with the
-molecule and is included in exported images.
+![switching between the CYLview look and the Houk style](docs/styles.gif)
+
+### Your own style
+
+`Ctrl+T` edits the style live: atom size, bond width, the background, one
+colour for every bond or split by atom, and a colour button for each element
+that is actually in the structure.
+
+![editing atom size, bond width and element colours](docs/style.gif)
+
+Save it and you have a **group standard**. The same file drives the viewer and
+the command line, so every figure in a paper comes out matching:
+
+```bash
+scope -s reactant.log --style ourgroup.json -o fig1.png
+scope -s ts.log       --style ourgroup.json -o fig2.png
+```
+
+The file is JSON, with elements by symbol and colours as `#rrggbb`, so it
+reads and edits by hand — and it only needs the keys you want to change:
+
+```json
+{
+  "name": "our group",
+  "atom_scale": 0.42,
+  "bond_color": "#1a1a1a",
+  "palette": {"C": "#4d4d4d", "N": "#2f5fd0", "O": "#d13b2e"}
+}
+```
+
+### Labels and axes
+
+`L` cycles the atom labels — element, element+number, number, off.
 
 ![cycling the atom labels](docs/labels.gif)
+
+`Shift+A` puts a triad of the world axes in the corner. It turns with the
+molecule, and it is included in exported images.
+
 ![the XYZ axis triad following the rotation](docs/axes.gif)
 
 ### Selecting and measuring
@@ -241,6 +259,7 @@ Everything the viewer does, in one place. Every entry is also in the menus.
 |---|---|
 | `Shift+L` | Lewis structure mode (read-only; drag turns, `Shift`+drag spins) |
 | `I` | isosurface controls: isovalue, opacity, colours, which MO |
+| `Ctrl+T` | the style editor — colours and sizes, live, savable as a file |
 | `Ctrl+E` | Export Image — PNG/TIFF, and SVG/PDF in Lewis mode |
 | `Ctrl+Shift+S` | Save for ChemDraw — `.cdxml` or `.mol` at the angle on screen |
 | `Ctrl+O` · `Ctrl+S` | open · save as (`xyz`, `.gjf`, `.inp`, `.in`, `pdb`, `.mol`) |
@@ -287,7 +306,7 @@ loads only matplotlib — neither starts Qt.
 | Flag | |
 |---|---|
 | `-o FILE` | output; the extension picks the format. Default: the input's name |
-| `--style cylview\|houk` · `--rep SPEC` | look, and per-region detail (`'1-12:ball;13-40:line'`) |
+| `--style NAME\|FILE` · `--rep SPEC` | `cylview`, `houk`, or a style file saved from the viewer; and per-region detail (`'1-12:ball;13-40:line'`) |
 | `--view NAME` · `--rotate X,Y` · `--align A,B[,C]` | named view · turn by degrees · look down a bond or into a plane |
 | `--zoom` · `--size WxH` · `--supersample N` | framing and resolution |
 | `--labels MODE` · `--measure A,B[,C[,D]]` · `--axes` | annotations drawn into the figure |

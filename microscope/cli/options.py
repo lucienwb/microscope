@@ -41,8 +41,9 @@ Atom numbers are 1-based, as shown in the viewer.""")
                         version=f"microscope {__version__}")
 
     look = parser.add_argument_group("appearance")
-    look.add_argument("--style", default="cylview", choices=("cylview", "houk"),
-                      help="rendering style (default: cylview)")
+    look.add_argument("--style", default="cylview", metavar="NAME|FILE",
+                      help="rendering style: cylview, houk, or a style file "
+                           "saved from the viewer (default: cylview)")
     look.add_argument("--rep", metavar="SPEC",
                       help="representation per atom range, e.g. "
                            "'stick' or '1-12:ball;13-40:line'")

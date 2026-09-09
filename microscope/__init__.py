@@ -24,6 +24,7 @@ from .core.results import ExcitedState, NMRShielding, ParseResult, Vibration
 from .core.volume import VolumeData
 from .io import load, save_lewis, save_molecule
 from .io.errors import FileFormatError, UnsupportedFormatError
+from .render.styles import Style, StyleError, load_style, save_style
 
 __all__ = [
     "__version__",
@@ -34,6 +35,8 @@ __all__ = [
     "VolumeData",
     # Lewis-structure perception
     "perceive", "LewisStructure",
+    # rendering styles, savable as files a group can share
+    "Style", "load_style", "save_style",
     # errors worth catching
-    "FileFormatError", "UnsupportedFormatError",
+    "FileFormatError", "UnsupportedFormatError", "StyleError",
 ]

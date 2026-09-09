@@ -9,7 +9,7 @@ command `scope`. Repo: https://github.com/lucienwb/microscope
 
 ```bash
 conda activate microscope          # python 3.12 env; pip install -e ".[dev]" done
-python -m pytest tests/ -q       # 261 tests, headless-safe (no GL/display needed)
+python -m pytest tests/ -q       # 273 tests, headless-safe (no GL/display needed)
 ruff check microscope tests scripts    # lint; mypy   # types, gui excluded
 scope <file>                     # launch the GUI
 scope -s <file> -o fig.png ...   # silent mode: render a figure, no window
@@ -115,7 +115,12 @@ Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/
   houk_style() ("Houkmol", matched to a real CYLview render: glossy, black
   bonds, C 0.90 gray, black great-circle seam lines on heavy atoms drawn in
   the sphere shader from world-x/y plane normals via
-  renderer.set_style_params(quad_color, quad_width)), make_style(name).
+  renderer.set_style_params(quad_color, quad_width)), make_style(name) which
+  takes a preset name *or* a path: a Style is plain data, and save_style /
+  load_style keep it as JSON with elements by symbol and colours as #rrggbb so
+  a group can hand-edit and share one. A style file only needs the keys it
+  changes, and a bad one raises StyleError naming the key rather than a
+  traceback. Both front ends read the same file (`--style ours.json`).
   lewis2d.py is the flat ChemDraw-style layout — pure numpy, no Qt: projects
   through the same camera (so turning the molecule picks the drawing's angle),
   folds hydrogens into labels, trims bonds to the label box, offsets the
@@ -240,11 +245,12 @@ presets/custom colors, publication-style measurement annotations,
 transparent PNG / uncompressed TIFF export, Houk/Houkmol style toggled with
 V, per-region ball&stick/stick/line representations on keys 1/2/3,
 flat ChemDraw-style Lewis mode on Shift+L with CDXML/molfile/SVG/PDF output,
+style editor on Ctrl+T with styles savable as shareable JSON files,
 LightCone-style move/rotate manipulator on the selection with `F` fragment
 select and `G` toggle, `Shift+A` XYZ axis triad, gnuplot-style silent-mode
 CLI `scope -s`, incl. --ir/--uv/--nmr spectrum plots). See CHANGELOG.md.
 
-Agreed next candidates: style editor, PyPI release (both `microscope` and
+Agreed next candidates: PyPI release (both `microscope` and
 `scope` are taken on PyPI, so the distribution name needs a decision).
 Computing MO/density grids from basis sets was proposed and **rejected** by the
 maintainer — see the pure-visualization constraint above.

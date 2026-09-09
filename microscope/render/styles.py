@@ -1,8 +1,15 @@
-"""Rendering style presets."""
+"""Rendering styles: the two presets, and reading or writing your own.
+
+A style is plain data, so a group can keep its own as a JSON file that both
+the viewer and `scope -s --style ours.json` use, and every figure in a paper
+comes out matching.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass, field, fields
+from pathlib import Path
 
 from ..core import elements
 
@@ -69,4 +76,98 @@ STYLE_PRESETS = {"cylview": Style, "houk": houk_style}
 
 
 def make_style(name: str) -> Style:
-    return STYLE_PRESETS[name]()
+    """A preset by name, or a style file by path."""
+    if name in STYLE_PRESETS:
+        return STYLE_PRESETS[name]()
+    if not Path(name).is_file():
+        raise StyleError(f"no style preset or file called {name!r} "
+                         f"(presets: {', '.join(sorted(STYLE_PRESETS))})")
+    return load_style(name)
+
+# ---------------------------------------------------------------- style files
+
+COLOR_FIELDS = ("background", "hbond_color", "surface_positive",
+                "surface_negative", "bond_color", "quadrant_color")
+
+
+class StyleError(ValueError):
+    """A style file that cannot be read as one."""
+
+
+def _to_hex(rgb) -> str:
+    return "#" + "".join(f"{round(max(0.0, min(1.0, c)) * 255):02x}" for c in rgb)
+
+
+def _from_hex(value, where: str):
+    """A colour written as #rrggbb, or as three numbers if you prefer."""
+    if isinstance(value, (list, tuple)):
+        if len(value) != 3:
+            raise StyleError(f"{where}: a colour needs three numbers")
+        return tuple(float(c) for c in value)
+    text = str(value).strip().lstrip("#")
+    if len(text) != 6:
+        raise StyleError(f"{where}: {value!r} is not #rrggbb")
+    try:
+        return tuple(int(text[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    except ValueError:
+        raise StyleError(f"{where}: {value!r} is not #rrggbb") from None
+
+
+def style_to_dict(style: Style) -> dict:
+    """A style as plain data, with colours as #rrggbb so it can be hand-edited."""
+    out = {}
+    for f in fields(style):
+        value = getattr(style, f.name)
+        if f.name == "palette":
+            out["palette"] = {elements.SYMBOLS[z]: _to_hex(c)
+                              for z, c in sorted(value.items())}
+        elif f.name in COLOR_FIELDS:
+            out[f.name] = None if value is None else _to_hex(value)
+        else:
+            out[f.name] = value
+    return out
+
+
+def style_from_dict(data: dict) -> Style:
+    """A style from plain data, saying which key is wrong rather than guessing."""
+    known = {f.name for f in fields(Style)}
+    unknown = set(data) - known
+    if unknown:
+        raise StyleError("not part of a style: " + ", ".join(sorted(unknown)))
+
+    kwargs = {}
+    for key, value in data.items():
+        if key == "palette":
+            palette = {}
+            for symbol, colour in (value or {}).items():
+                z = elements.symbol_to_z(symbol)
+                if not z:
+                    raise StyleError(f"palette: {symbol!r} is not an element")
+                palette[z] = _from_hex(colour, f"palette[{symbol}]")
+            kwargs["palette"] = palette
+        elif key in COLOR_FIELDS:
+            kwargs[key] = None if value is None else _from_hex(value, key)
+        else:
+            kwargs[key] = value
+    return Style(**kwargs)
+
+
+def save_style(path, style: Style) -> None:
+    """Write a style as JSON, ready to share or edit by hand."""
+    Path(path).write_text(json.dumps(style_to_dict(style), indent=2) + "\n")
+
+
+def load_style(path) -> Style:
+    """Read a style file written by :func:`save_style`, or edited by hand."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except OSError as exc:
+        raise StyleError(f"{path}: {exc.strerror}") from None
+    except json.JSONDecodeError as exc:
+        raise StyleError(f"{path}: not valid JSON ({exc.msg}, line {exc.lineno})") from None
+    if not isinstance(data, dict):
+        raise StyleError(f"{path}: a style file holds one object")
+    try:
+        return style_from_dict(data)
+    except StyleError as exc:
+        raise StyleError(f"{path}: {exc}") from None

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Style editor** (`Ctrl+T`, View → Style…): atom size, bond width, the
+  background, one colour for every bond or split by atom, and a colour button
+  for each element actually in the structure — applied as you change them.
+  Save it and the same file drives the viewer and `scope -s --style
+  ours.json`, so a group can keep one standard and every figure in a paper
+  matches. The file is JSON with elements by symbol and colours as `#rrggbb`,
+  needs only the keys it changes, and names the offending key rather than
+  raising a traceback when it is wrong
+- The README opens with a table of what the program does, each row linking to
+  the section that shows it working, and every one of those sections is one
+  capability with its own animation
+
 - A Gaussian frequency job is no longer refused because one number would not
   fit its column. Gaussian fills the field with asterisks; the value is
   missing, which Vibration already had a way to say, and a whole calculation

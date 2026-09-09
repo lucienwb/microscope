@@ -27,7 +27,7 @@ from ..render.lewisdraw import render_lewis_image, write_lewis_vector
 from ..render.offscreen import render_molecule_image
 from ..render.scene import REP_BALL, REP_LINE, REP_STICK
 from .annotations import draw_annotations
-from .dialogs import AdjustDialog, ExportImageDialog, SurfaceDialog
+from .dialogs import AdjustDialog, ExportImageDialog, StyleDialog, SurfaceDialog
 from .filetypes import (
     _CHEMDRAW_DEFAULT_EXT,
     _EXPORT_DEFAULT_EXT,
@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self.result: ParseResult | None = None
         self.current_frame = 0
         self._surface_dialog: SurfaceDialog | None = None
+        self._style_dialog: StyleDialog | None = None
 
         self.viewport = MoleculeViewport(self)
         # the flat view shares the camera, so both stay on the same orientation
@@ -421,6 +422,13 @@ class MainWindow(QMainWindow):
         self._repr_actions[name].setChecked(True)
         label = "CYLview" if name == "cylview" else "Houk (Houkmol)"
         self.statusBar().showMessage(f"Representation: {label}", 3000)
+
+    def edit_style(self):
+        """Open the style editor — live, and savable as a file to share."""
+        if self._style_dialog is None:
+            self._style_dialog = StyleDialog(self.viewport, self)
+        self._style_dialog.show()
+        self._style_dialog.raise_()
 
     def _toggle_representation(self):
         current = self.viewport.style.name
