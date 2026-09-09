@@ -9,7 +9,7 @@ command `scope`. Repo: https://github.com/lucienwb/microscope
 
 ```bash
 conda activate microscope          # python 3.12 env; pip install -e ".[dev]" done
-python -m pytest tests/ -q       # 260 tests, headless-safe (no GL/display needed)
+python -m pytest tests/ -q       # 261 tests, headless-safe (no GL/display needed)
 ruff check microscope tests scripts    # lint; mypy   # types, gui excluded
 scope <file>                     # launch the GUI
 scope -s <file> -o fig.png ...   # silent mode: render a figure, no window

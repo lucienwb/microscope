@@ -335,3 +335,34 @@ def test_pdb_reads_the_formal_charge_columns(tmp_path):
                        "  1.00  0.00           N1+\n")
     mol = mio.load(charged).molecule
     assert mol.charge == 1 and mol.charge_known
+
+def test_a_value_gaussian_could_not_print_is_missing_not_fatal(tmp_path):
+    """Gaussian fills a field with asterisks when the number will not fit.
+
+    A whole calculation used to be refused over a Raman activity nobody had
+    asked for.
+    """
+    job = tmp_path / "freq.log"
+    job.write_text(
+        " Entering Gaussian System\n #p freq\n\n Charge =  0 Multiplicity = 1\n"
+        "                         Standard orientation:\n"
+        " ---------------------------------------------------------\n"
+        " Center     Atomic     Atomic              Coordinates\n"
+        " Number     Number      Type              X        Y        Z\n"
+        " ---------------------------------------------------------\n"
+        "    1          1             0        0.000000  0.000000  0.000000\n"
+        "    2          1             0        0.740000  0.000000  0.000000\n"
+        " ---------------------------------------------------------\n"
+        " Frequencies --  4400.0000\n"
+        " Red. masses --     1.0000\n"
+        " IR Inten    --***********\n"
+        " Raman Activ --***********\n"
+        " Atom AN      X      Y      Z\n"
+        "   1   1     0.00   0.00   0.71\n"
+        "   2   1     0.00   0.00  -0.71\n"
+        " Normal termination of Gaussian\n")
+    result = mio.load(job)
+    assert len(result.vibrations) == 1
+    mode = result.vibrations[0]
+    assert mode.frequency == pytest.approx(4400.0)
+    assert mode.ir_intensity is None and mode.raman_activity is None

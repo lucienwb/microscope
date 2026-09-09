@@ -152,6 +152,23 @@ def read_log(path) -> ParseResult:
     return result
 
 
+def _intensities(line: str) -> list:
+    """The numbers after "--" on an intensity line, None where there are none.
+
+    Gaussian fills the field with asterisks when a value will not fit in it,
+    and a whole calculation used to be refused over a Raman activity nobody
+    had asked for. The value is missing, which the Vibration already has a
+    way to say.
+    """
+    out = []
+    for token in line.split("--", 1)[1].split():
+        try:
+            out.append(float(token))
+        except ValueError:
+            out.append(None)              # "***********": it did not fit
+    return out
+
+
 def _parse_freq_block(lines: list[str], i: int, vibrations: list[Vibration]) -> int:
     """Parse one 'Frequencies --' column group; return the next line index."""
     n = len(lines)
@@ -168,9 +185,9 @@ def _parse_freq_block(lines: list[str], i: int, vibrations: list[Vibration]) -> 
     while j < n:
         s = lines[j].lstrip()
         if s.startswith("IR Inten"):
-            ir = [float(x) for x in lines[j].split("--")[1].split()]
+            ir = _intensities(lines[j])
         elif s.startswith("Raman Activ"):
-            raman = [float(x) for x in lines[j].split("--")[1].split()]
+            raman = _intensities(lines[j])
         elif s.startswith("Atom") and "AN" in s:
             j += 1
             while j < n:

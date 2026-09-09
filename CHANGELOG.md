@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A Gaussian frequency job is no longer refused because one number would not
+  fit its column. Gaussian fills the field with asterisks; the value is
+  missing, which Vibration already had a way to say, and a whole calculation
+  used to be lost over a Raman activity nobody had asked for
+
 - Metal complexes are drawn the way an organometallic paper draws them. A
   dative bond shown as a plain line used to make a phosphine into a
   phosphonium, and the balancing minus belonged on a metal that was kept out
