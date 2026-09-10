@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The README is a front page again: what microscope is, how to install it, how
+  to use it, and a link to the documentation site for everything else. It went
+  from 439 lines to 88, and every link in it resolves on the live site
+
 - **A documentation site**, at https://lucienwb.github.io/microscope/: a guide
   with an animation of each feature, and references for every key, command-
   line flag, style-file key and file format, plus the Python API and how it
