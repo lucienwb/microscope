@@ -12,3 +12,8 @@ dist/
 examples/output/
 examples/data/
 site/
+
+# Claude Code's working files stay local: the project guide it reads at the
+# start of a session, and its per-machine settings.
+CLAUDE.md
+.claude/
