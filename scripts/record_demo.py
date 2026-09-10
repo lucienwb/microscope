@@ -35,7 +35,7 @@ from microscope.render.offscreen import render_molecule_image  # noqa: E402
 from microscope.render.scene import REP_BALL, REP_LINE, REP_STICK  # noqa: E402
 from microscope.render.styles import make_style  # noqa: E402
 
-OUT = REPO / "docs"
+OUT = REPO / "docs" / "assets"
 DATA = REPO / "tests/data"
 W, H = 560, 400
 COLORS = 64          # enough for shaded spheres, small enough for a README

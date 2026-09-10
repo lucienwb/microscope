@@ -9,7 +9,11 @@ Q-Chem outputs, `xyz`, `pdb`, `fchk`, Molden — and turns them into clean 3D
 structures, interactive IR/UV-Vis/NMR spectra, editable geometries, and
 figures ready for a paper.
 
-![tryptophan rendered by microscope](docs/screenshot_trp.png)
+**Documentation: [lucienwb.github.io/microscope](https://lucienwb.github.io/microscope/)**
+— a guide with an animation of each feature, and references for every key,
+flag, style-file key and file format.
+
+![tryptophan rendered by microscope](docs/assets/screenshot_trp.png)
 
 ## What it does
 
@@ -73,7 +77,7 @@ Left-drag turns, right-drag pans, the wheel zooms. `A` with two atoms selected
 looks straight down that bond; with three, it puts their plane in the screen.
 `C` rotates about the selected atom, `Home` re-centres, `Ctrl+R` starts over.
 
-![turning a molecule](docs/orbit.gif)
+![turning a molecule](docs/assets/orbit.gif)
 
 ### Two looks
 
@@ -82,7 +86,7 @@ never faceted, split-colour bonds — and the **Houk (Houkmol)** style: glossy
 ball-and-stick with black bonds, near-white carbons and the quadrant seam
 lines that stay readable in a black-and-white printout.
 
-![switching between the CYLview look and the Houk style](docs/styles.gif)
+![switching between the CYLview look and the Houk style](docs/assets/styles.gif)
 
 ### Your own style
 
@@ -90,7 +94,7 @@ lines that stay readable in a black-and-white printout.
 colour for every bond or split by atom, and a colour button for each element
 that is actually in the structure.
 
-![editing atom size, bond width and element colours](docs/style.gif)
+![editing atom size, bond width and element colours](docs/assets/style.gif)
 
 Save it and you have a **group standard**. The same file drives the viewer and
 the command line, so every figure in a paper comes out matching:
@@ -116,12 +120,12 @@ reads and edits by hand — and it only needs the keys you want to change:
 
 `L` cycles the atom labels — element, element+number, number, off.
 
-![cycling the atom labels](docs/labels.gif)
+![cycling the atom labels](docs/assets/labels.gif)
 
 `Shift+A` puts a triad of the world axes in the corner. It turns with the
 molecule, and it is included in exported images.
 
-![the XYZ axis triad following the rotation](docs/axes.gif)
+![the XYZ axis triad following the rotation](docs/assets/axes.gif)
 
 ### Selecting and measuring
 
@@ -131,14 +135,14 @@ selected the distance, angle or dihedral is shown live and drawn the way a
 paper draws it — the distance written along the bond, the angle marked with an
 arc at the vertex, the dihedral with a rotation arrow around the central bond.
 
-![measuring a distance, an angle and a dihedral](docs/measure.gif)
+![measuring a distance, an angle and a dihedral](docs/assets/measure.gif)
 
 `M` pins the current measurement into the scene so it stays while you pick the
 next one (`Shift+M` clears them); pinned measurements are exported with the
 figure. Larger selections just report the count, ready for the region
 commands below.
 
-![labels, pinned measurements and plane alignment](docs/screenshot_features.png)
+![labels, pinned measurements and plane alignment](docs/assets/screenshot_features.png)
 
 ### Moving atoms by hand
 
@@ -150,7 +154,7 @@ connected fragment, so a ligand or a substituent is picked up in one
 keystroke, and `G` hides the handles when they are in the way. Everything is
 undoable.
 
-![sliding and turning a fragment with the manipulator](docs/handles.gif)
+![sliding and turning a fragment with the manipulator](docs/assets/handles.gif)
 
 For an exact change rather than a dragged one, select 2–4 atoms and press `E`:
 a dialog sets the distance, angle or dihedral with live preview, and the
@@ -163,7 +167,7 @@ Select a region and give it its own level of detail with `1`, `2` and `3` —
 ball-and-stick for the part that matters, sticks for the surroundings, thin
 lines for the rest. With nothing selected the whole molecule switches.
 
-![giving a region its own level of detail](docs/regions.gif)
+![giving a region its own level of detail](docs/assets/regions.gif)
 
 ### Lewis structures
 
@@ -175,14 +179,14 @@ drawing is made from** — drag to turn, `Shift`+drag to spin it in the plane of
 the page. The mode is deliberately read-only, because picking the angle is all
 it is for.
 
-![turning a Lewis structure to pick the angle it is drawn from](docs/lewis_spin.gif)
+![turning a Lewis structure to pick the angle it is drawn from](docs/assets/lewis_spin.gif)
 
 Four toggles decide what it shows: every hydrogen or only the folded ones,
 labelled carbons, lone-pair dots, and coloured heteroatoms.
 
-![the Lewis drawing options](docs/lewis_options.gif)
+![the Lewis drawing options](docs/assets/lewis_options.gif)
 
-![the Lewis structure mode beside the 3-D view](docs/screenshot_lewis.png)
+![the Lewis structure mode beside the 3-D view](docs/assets/screenshot_lewis.png)
 
 Export it as PNG or TIFF, as **SVG or PDF** (it is line art, so it stays line
 art), or `Ctrl+Shift+S` to write a **ChemDraw CDXML** or an **MDL molfile** at
@@ -206,20 +210,20 @@ surface appears. `I` opens live controls — isovalue, opacity, a colour for
 each lobe from curated pairs or any RGB/HEX value, and which orbital to show
 for a multi-MO cube.
 
-![sweeping the isovalue of an orbital](docs/isosurface.gif)
+![sweeping the isovalue of an orbital](docs/assets/isosurface.gif)
 
 ### Trajectories and vibrations
 
 An optimization, IRC or scan plays back geometry by geometry, with the energy
 of each.
 
-![playing back a coordinate scan](docs/trajectory.gif)
+![playing back a coordinate scan](docs/assets/trajectory.gif)
 
 Open a frequency job and the spectra panel appears (`S`). **Click an IR band
 and the molecule walks through that normal mode** — click again or press
 `Space` to stop.
 
-![animating a normal mode](docs/vibration.gif)
+![animating a normal mode](docs/assets/vibration.gif)
 
 ## Keyboard reference
 
@@ -361,7 +365,7 @@ automatically (`S` toggles it):
 
 Every spectrum exports as CSV (data) or PNG/SVG/PDF (figure) for publications.
 
-![IR spectrum with the animated C–H stretch selected](docs/screenshot_ir_spectrum.png)
+![IR spectrum with the animated C–H stretch selected](docs/assets/screenshot_ir_spectrum.png)
 
 ## Roadmap
 

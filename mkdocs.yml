@@ -1,0 +1,110 @@
+site_name: microscope
+site_description: >-
+  A molecular structure and spectroscopy viewer for quantum chemistry, with
+  CYLview-style rendering, ChemDraw-style Lewis structures, and a command line
+  that turns a calculation into a figure.
+site_url: https://lucienwb.github.io/microscope/
+repo_url: https://github.com/lucienwb/microscope
+repo_name: lucienwb/microscope
+edit_uri: edit/main/docs/
+copyright: MIT licensed
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Guide:
+      - Looking at a structure: guide/viewing.md
+      - Your own style: guide/style.md
+      - Selecting and measuring: guide/measuring.md
+      - Moving and editing: guide/editing.md
+      - Mixed representations: guide/representations.md
+      - Lewis structures: guide/lewis.md
+      - Orbitals and densities: guide/orbitals.md
+      - Trajectories and vibrations: guide/trajectories.md
+      - Spectra: guide/spectra.md
+  - Reference:
+      - Keyboard: reference/keyboard.md
+      - Command line: reference/command-line.md
+      - Style files: reference/style-files.md
+      - File formats: reference/formats.md
+      - Python API: reference/python-api.md
+  - About:
+      - How it works: about/how-it-works.md
+      - Development: about/development.md
+      - Changelog: about/changelog.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.keys
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            show_root_heading: true
+            show_source: false
+            members_order: source
+            docstring_style: google
+            show_signature_annotations: true
+            separate_signature: true
+
+hooks:
+  - scripts/mkdocs_hooks.py
+
+extra_css:
+  - stylesheets/extra.css

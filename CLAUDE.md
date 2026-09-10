@@ -15,7 +15,19 @@ scope <file>                     # launch the GUI
 scope -s <file> -o fig.png ...   # silent mode: render a figure, no window
 python scripts/preview.py <file> out.png    # offscreen render (visual checks)
 python scripts/demo_features.py  # GUI feature showcase
+mkdocs serve                     # the docs site, live (pip install -e ".[docs]")
+python scripts/record_demo.py    # re-record the animations into docs/assets/
 ```
+
+Documentation site: https://lucienwb.github.io/microscope/ — MkDocs Material,
+source in docs/ (images in docs/assets/), built and published by
+.github/workflows/docs.yml on every push to main that touches it. The
+command-line and style-file reference pages are generated at build time by
+scripts/mkdocs_hooks.py from the argparse parser and the Style dataclass, and
+the Python API page by mkdocstrings from the docstrings, so none of the three
+can drift. mkdocs is pinned below 2.0, which removes the plugin system both
+the theme and mkdocstrings rely on. `mkdocs build --strict` fails on any
+broken link, and is what CI runs.
 
 Absolute env python: `/opt/homebrew/Caskroom/miniforge/base/envs/microscope/bin/python`
 

@@ -11,3 +11,4 @@ dist/
 *.png.tmp
 examples/output/
 examples/data/
+site/

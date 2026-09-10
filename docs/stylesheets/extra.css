@@ -1,0 +1,26 @@
+/* Animations and screenshots: centred, never wider than the text, with a
+   hairline so a white-background render does not dissolve into the page. */
+.md-typeset img[src$=".gif"],
+.md-typeset img[src$=".png"] {
+  display: block;
+  margin: 1.2em auto;
+  max-width: 100%;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+}
+
+/* A caption straight after an image. */
+.md-typeset img + em {
+  display: block;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  margin-top: -0.6em;
+}
+
+/* Keyboard keys read better a touch larger in the reference tables. */
+.md-typeset kbd { font-size: 0.8em; }
+
+/* The landing page's render is a banner: wide, and short enough that the
+   feature cards are on screen without scrolling. */
+.md-typeset img[src$="hero.png"] { max-height: 300px; width: auto; }

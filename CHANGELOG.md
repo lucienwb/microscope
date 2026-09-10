@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A documentation site**, at https://lucienwb.github.io/microscope/: a guide
+  with an animation of each feature, and references for every key, command-
+  line flag, style-file key and file format, plus the Python API and how it
+  works. The flag, style-file and API references are generated from the code
+  at build time, so they cannot fall out of date, and the build fails on any
+  broken link. It publishes itself to GitHub Pages from `main`
+
 - **Style editor** (`Ctrl+T`, View → Style…): atom size, bond width, the
   background, one colour for every bond or split by atom, and a colour button
   for each element actually in the structure — applied as you change them.
