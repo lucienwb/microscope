@@ -32,7 +32,7 @@ class LewisView(QWidget):
         super().__init__(parent)
         self.camera = OrthoCamera()
         self.molecule: Molecule | None = None
-        self.structure: lewis.LewisStructure | None = None
+        self._structure: lewis.LewisStructure | None = None
         self.options = LewisOptions()
         self._last_pos = None
         self.setAutoFillBackground(True)
@@ -47,8 +47,17 @@ class LewisView(QWidget):
 
     def set_molecule(self, molecule: Molecule | None) -> None:
         self.molecule = molecule
-        self.structure = None if molecule is None else lewis.perceive(molecule)
+        self._structure = None           # perceived when first wanted, not on every open
         self.update()
+
+    @property
+    def structure(self) -> lewis.LewisStructure | None:
+        """The perceived Lewis structure, worked out the first time it is asked
+        for: most files are opened and never shown flat, and on a protein the
+        perception is a quarter of a second."""
+        if self._structure is None and self.molecule is not None:
+            self._structure = lewis.perceive(self.molecule)
+        return self._structure
 
     def set_option(self, name: str, value: bool) -> None:
         setattr(self.options, name, bool(value))

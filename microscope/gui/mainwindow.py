@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QLabel,
@@ -40,6 +41,7 @@ from .filetypes import (
     with_extension,
 )
 from .lewisview import LewisView
+from .loading import Loader, prepare
 from .menus import build_menus
 from .spectra import SpectraDock
 from .viewport import MoleculeViewport
@@ -63,6 +65,7 @@ class MainWindow(QMainWindow):
         self.current_frame = 0
         self._surface_dialog: SurfaceDialog | None = None
         self._orbital_grids: dict[tuple[str, int], object] = {}   # last few, newest last
+        self._loader: Loader | None = None                        # the file being read
         self._style_dialog: StyleDialog | None = None
 
         self.viewport = MoleculeViewport(self)
@@ -131,12 +134,46 @@ class MainWindow(QMainWindow):
         if path:
             self.open_file(path)
 
-    def open_file(self, path):
-        try:
-            result = mio.load(path)
-        except Exception as exc:
-            QMessageBox.critical(self, "Could not open file", f"{path}\n\n{exc}")
+    def open_file(self, path, then=None, wait: bool = False):
+        """Read *path* on a worker thread and show it once it is ready, so a
+        big file does not freeze the window; *then* runs after that, for
+        whoever needed the file on screen first. *wait* reads it here and now,
+        for scripts that want the window filled before they go on."""
+        path = str(path)
+        if wait:
+            try:
+                result = prepare(path)
+            except Exception as exc:
+                self._open_failed(str(exc), path)
+                return
+            self._show(result, path, then)
             return
+        if self._loader is not None and self._loader.isRunning():
+            self.statusBar().showMessage(
+                f"Still opening {Path(self._loader.path).name} — one file at a time", 4000)
+            return
+        self.statusBar().showMessage(f"Opening {Path(path).name}…")
+        QApplication.setOverrideCursor(Qt.CursorShape.BusyCursor)
+        self._loader = Loader(path, then, self)
+        self._loader.loaded.connect(self._loaded)
+        self._loader.failed.connect(self._load_failed)
+        self._loader.start()
+
+    def _loaded(self, result: ParseResult):
+        QApplication.restoreOverrideCursor()
+        self.statusBar().clearMessage()
+        self._show(result, self._loader.path, self._loader.then)
+
+    def _load_failed(self, message: str):
+        QApplication.restoreOverrideCursor()
+        self.statusBar().clearMessage()
+        self._open_failed(message, self._loader.path)
+
+    def _open_failed(self, message: str, path: str):
+        QMessageBox.critical(self, "Could not open file", f"{path}\n\n{message}")
+
+    def _show(self, result: ParseResult, path: str, then=None):
+        """Put a freshly read file on screen: everything that needs Qt or GL."""
         self.result = result
         self.current_frame = result.nframes - 1
         self._edited = False
@@ -182,6 +219,8 @@ class MainWindow(QMainWindow):
             self._frame_slider.setValue(self.current_frame)
             self._frame_slider.blockSignals(False)
             self._update_frame_label()
+        if then is not None:
+            then()
 
     def _frame_changed(self, value: int):
         if self.result is None:
@@ -551,6 +590,11 @@ class MainWindow(QMainWindow):
             "Ctrl+Z / Ctrl+Shift+Z undo/redo · S spectra · Space stops animation<br>"
             "I draws orbitals (fchk, Molden) and cube-file isosurfaces<br>"
             "Shift+L draws the flat Lewis structure (ChemDraw style)")
+
+    def closeEvent(self, event):
+        if self._loader is not None and self._loader.isRunning():
+            self._loader.wait()          # a QThread destroyed mid-run takes the app down
+        super().closeEvent(event)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

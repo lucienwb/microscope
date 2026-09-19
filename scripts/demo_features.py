@@ -59,7 +59,7 @@ def main():
     win = MainWindow()
     win.resize(1100, 800)
     win.show()
-    win.open_file(str(DATA))
+    win.open_file(str(DATA), wait=True)
 
     def setup():
         vp = win.viewport

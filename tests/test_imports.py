@@ -49,3 +49,12 @@ def test_the_viewer_starts_without_matplotlib():
                           env=env, cwd=str(Path(__file__).parent.parent))
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "False"
+
+
+def test_the_worker_thread_does_the_reading_and_the_bonds():
+    """What the viewer hands to a worker thread must leave nothing slow behind:
+    the file read and the bonds found, so the GUI thread only builds the scene."""
+    from microscope.gui.loading import prepare
+
+    result = prepare(Path(__file__).parent / "data" / "trp.log")
+    assert result.molecule.bonds is not None and len(result.molecule.bonds) > 20

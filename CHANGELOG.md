@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Files open in the background: reading and bond perception run on a worker
+  thread, so a big file no longer freezes the window. On a 98,000-atom protein
+  the longest pause went from 1.6 s to a quarter of a second, the scene being
+  built at the end. The flat Lewis structure is worked out when Lewis mode is
+  first switched on rather than for every file opened
 - Spectrum CSVs carry a byte-order mark, so Excel on Windows reads the cm⁻¹
   in the header instead of mojibake
 - The viewer starts in a quarter of the time: matplotlib, half of what it

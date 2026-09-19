@@ -45,14 +45,17 @@ def main(path: str | None = None, style: str = "cylview",
         window._label_actions[label_mode].setChecked(True)
     if axes:
         window._axes_action.setChecked(True)      # toggled -> viewport
-    if path:
-        window.open_file(path)
-        if orbital:
-            window.show_orbital(orbital)
     for name, value in (lewis_options or {}).items():
         window._lewis_options[name].setChecked(bool(value))
-    if lewis:
-        window._lewis_action.setChecked(True)     # needs the file open first
+
+    def once_open():
+        if orbital:
+            window.show_orbital(orbital)
+        if lewis:
+            window._lewis_action.setChecked(True)     # needs the file open first
+
+    if path:
+        window.open_file(path, then=once_open)        # read off the GUI thread
     return app.exec()
 
 
