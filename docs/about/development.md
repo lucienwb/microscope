@@ -8,7 +8,8 @@ pip install -e ".[dev]"
 
 ## Checks
 
-All three must pass, and CI runs them on every push:
+All three must pass, and CI runs them on every push: the tests on Linux, macOS
+and Windows under Python 3.10 and 3.12, lint and types once.
 
 ```bash
 pytest                                  # the test suite, headless

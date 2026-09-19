@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- CI now enforces what the development notes always said: ruff and mypy run
+  on every push, in their own job, next to the tests. Every action moved to
+  its Node 24 release, which ends the deprecation warning on each run
 - **Orbitals straight from the wavefunction.** An `.fchk` or `.molden` file
   now brings its basis set and orbitals with it. Press `I` for a list of every
   orbital with its energy and occupation, HOMO first on screen, and step
