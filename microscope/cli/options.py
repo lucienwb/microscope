@@ -25,6 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
   scope -s mol.xyz --view top --labels number --measure 3,4
   scope -s mol.log --rep '1-12:ball;13-40:line' --view 30,-15
   scope -s homo.cube --iso 0.03 --iso-colors purple,gold --axes
+  scope -s mol.fchk --mo homo            draw the HOMO from the wavefunction
+  scope -s mol.molden --mo lumo+1 -o lumo1.cube     (the grid, for other viewers)
+  scope mol.fchk --mo homo               open the viewer showing the HOMO
   scope -s mol.log --lewis -o scheme.svg --align 2,3,4
   scope -s mol.log --lewis -o mol.cdxml     (opens in ChemDraw at that angle)
   scope -s freq.log --ir -o ir.pdf --fwhm 12 --freq-scale 0.965
@@ -36,7 +39,8 @@ Atom numbers are 1-based, as shown in the viewer.""")
     parser.add_argument("-s", "--silent", action="store_true",
                         help="do not open a window: render to an image and exit")
     parser.add_argument("-o", "--output", metavar="PATH",
-                        help="image to write (.png or .tif; default: <file>.png)")
+                        help="image to write (.png or .tif; default: <file>.png), "
+                             "or .cube to write the --mo grid itself")
     parser.add_argument("--version", action="version",
                         version=f"microscope {__version__}")
 
@@ -136,8 +140,10 @@ Atom numbers are 1-based, as shown in the viewer.""")
                       help="trajectory frame, 1-based (default: the last one)")
     data.add_argument("--cube", metavar="FILE",
                       help="cube file to draw an isosurface from")
-    data.add_argument("--mo", type=int, metavar="N",
-                      help="which grid of a multi-MO cube to use (1-based)")
+    data.add_argument("--mo", metavar="ORBITAL",
+                      help="orbital to draw from an fchk or Molden file: homo, "
+                           "lumo, homo-1, lumo+2, its number, or beta:homo; "
+                           "for a cube holding several grids, which one (1-based)")
     data.add_argument("--iso", type=float, metavar="VALUE",
                       help="isosurface level (default: chosen from the grid)")
     data.add_argument("--iso-colors", metavar="POS,NEG",
@@ -160,7 +166,7 @@ _LEWIS_INCOMPATIBLE = ("style", "rep", "bond_color", "no_hbonds", "labels",
                        "axes", "measure", "supersample", "cube", "mo", "iso",
                        "iso_colors", "iso_opacity")
 # these configure the viewer too, so they are allowed without -s
-_GUI_ALLOWED = ("style", "labels", "axes", "lewis") + _LEWIS_ONLY
+_GUI_ALLOWED = ("style", "labels", "axes", "lewis", "mo") + _LEWIS_ONLY
 _DEFAULTS = {"zoom": 1.0, "supersample": 3, "style": "cylview",
              "labels": "none", "freq_scale": 1.0, "unit": "nm", "reference": 0.0,
              "dpi": 300}

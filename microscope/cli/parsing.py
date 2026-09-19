@@ -7,6 +7,7 @@ paid for graphics.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -142,7 +143,8 @@ def check_output(path: str, kind: str | None = None) -> str:
         raise CliError(
             f"cannot write {what}; use " + (
                 ", ".join(allowed) if kind else
-                ".png or .tif (only formats that keep transparency)"))
+                ".png or .tif (only formats that keep transparency), "
+                "or .cube for the grid of an orbital"))
     return path
 
 
@@ -257,17 +259,43 @@ def build_style(args):
 
 
 def load_volume(args, result):
-    """The grid to draw an isosurface from: --cube wins, else one in the file."""
-    volumes = list(result.volumes)
+    """The grid to draw an isosurface from: --cube wins, then an orbital from
+    the file's wavefunction, then a grid the file holds itself."""
     if args.cube:
         volumes = list(mio.load(args.cube).volumes)
         if not volumes:
             raise CliError(f"no volumetric data in {args.cube}")
-    if not volumes:
+        return _pick_grid(args.mo, volumes)
+    if args.mo is not None and result.orbitals is not None:
+        if result.orbitals.convention == "unrecognized":
+            print("scope: warning: this file's basis-set conventions were not "
+                  "recognized, so the orbital may be drawn wrong", file=sys.stderr)
+        try:
+            return result.orbitals.volume(args.mo)
+        except ValueError as exc:
+            raise CliError(f"--mo: {exc}") from None
+    if not result.volumes:
+        if args.mo is not None and result.warnings:
+            raise CliError(f"--mo: {Path(args.file).name} has a wavefunction, but "
+                           + "; ".join(result.warnings))
+        if args.mo is not None:
+            raise CliError(f"--mo needs a wavefunction (.fchk or .molden) or a cube "
+                           f"file, and {Path(args.file).name} has neither")
         return None
-    if args.mo is None:
+    return _pick_grid(args.mo, result.volumes)
+
+
+def _pick_grid(spec, volumes):
+    """--mo on a cube file: the grid's position, since a cube has no occupations."""
+    if spec is None:
         return volumes[0]
-    if not 1 <= args.mo <= len(volumes):
-        raise CliError(f"--mo {args.mo} is out of range "
+    try:
+        number = int(spec)
+    except ValueError:
+        held = "one grid" if len(volumes) == 1 else f"grids 1-{len(volumes)}"
+        raise CliError(f"--mo {spec}: a cube file says nothing about occupations, so "
+                       f"give the grid's number (it holds {held})") from None
+    if not 1 <= number <= len(volumes):
+        raise CliError(f"--mo {number} is out of range "
                        f"(the cube holds {len(volumes)} grids)")
-    return volumes[args.mo - 1]
+    return volumes[number - 1]

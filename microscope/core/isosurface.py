@@ -2,9 +2,9 @@
 
 Uses marching tetrahedra (each grid cell split into 6 tetrahedra around the
 0-6 diagonal): the per-tetrahedron case table is tiny and unambiguous, unlike
-the 256-entry marching-cubes tables. Vertex normals come from the trilinearly
-interpolated gradient of the scalar field, which gives smooth shading without
-any mesh connectivity bookkeeping.
+the 256-entry marching-cubes tables. Vertex normals come from the gradient of
+the scalar field, interpolated along the grid edge each vertex sits on, which
+gives smooth shading without any mesh connectivity bookkeeping.
 """
 
 from __future__ import annotations
@@ -47,31 +47,64 @@ def marching_tetrahedra(values: np.ndarray, level: float) -> np.ndarray:
     Returns an array of shape (ntriangles, 3, 3): triangle corners in
     fractional grid-index coordinates.
     """
-    values = np.asarray(values, dtype=np.float32)
-    if values.ndim != 3 or min(values.shape) < 2:
-        return np.zeros((0, 3, 3), dtype=np.float32)
+    return _march(values, level, normals=False)[0]
+
+
+def _straddling(values: np.ndarray, level: float) -> np.ndarray:
+    """Cells with corners on both sides of the level. The running min and max
+    are kept in place: reducing a list of the eight corner views first stacks
+    them, eight copies of the grid, which on an orbital grid is 250 MB."""
     nx, ny, nz = values.shape
-    corner_vals = [values[dx:nx - 1 + dx, dy:ny - 1 + dy, dz:nz - 1 + dz]
-                   for dx, dy, dz in _CORNERS]
-    straddling = ((np.minimum.reduce(corner_vals) <= level)
-                  & (level < np.maximum.reduce(corner_vals)))
+    views = [values[dx:nx - 1 + dx, dy:ny - 1 + dy, dz:nz - 1 + dz] for dx, dy, dz in _CORNERS]
+    low, high = views[0].copy(), views[0].copy()
+    for view in views[1:]:
+        np.minimum(low, view, out=low)
+        np.maximum(high, view, out=high)
+    return (low <= level) & (level < high)
+
+
+def _corner_gradients(values: np.ndarray, corners: list) -> np.ndarray:
+    """(M, 8, 3) central-difference gradient at each corner of the kept cells,
+    one-sided at the edges of the grid, as np.gradient does - but only at the
+    points the surface needs, not over the whole grid."""
+    n = values.shape
+    out = np.empty((len(corners[0][0]), 8, 3), dtype=np.float32)
+    for c, index in enumerate(corners):
+        for k in range(3):
+            up, down = list(index), list(index)
+            up[k] = np.minimum(index[k] + 1, n[k] - 1)
+            down[k] = np.maximum(index[k] - 1, 0)
+            out[:, c, k] = ((values[tuple(up)] - values[tuple(down)])
+                            / (up[k] - down[k]).astype(np.float32))
+    return out
+
+
+def _march(values: np.ndarray, level: float, normals: bool):
+    """Triangles, and with *normals* the field's gradient at each vertex:
+    every vertex lies on an edge between two grid points, so its gradient is
+    the one at those two points, interpolated as the vertex is."""
+    values = np.asarray(values, dtype=np.float32)
+    empty = np.zeros((0, 3, 3), dtype=np.float32)
+    if values.ndim != 3 or min(values.shape) < 2:
+        return empty, empty.copy()
     # Only the shell of cells the surface passes through is kept, and their
     # indices fit an int32 many times over; the corner positions are built one
-    # tetrahedron at a time rather than held as an (M, 8, 3) array, which on a
-    # 128^3 grid is the difference between 150 MB and 40.
-    cells = np.argwhere(straddling).astype(np.int32)
+    # tetrahedron at a time rather than held as an (M, 8, 3) array.
+    cells = np.argwhere(_straddling(values, level)).astype(np.int32)
     if len(cells) == 0:
-        return np.zeros((0, 3, 3), dtype=np.float32)
-
-    cell_vals = np.stack([values[cells[:, 0] + dx, cells[:, 1] + dy, cells[:, 2] + dz]
-                          for dx, dy, dz in _CORNERS], axis=1)          # (M, 8)
+        return empty, empty.copy()
+    corners = [(cells[:, 0] + dx, cells[:, 1] + dy, cells[:, 2] + dz)
+               for dx, dy, dz in _CORNERS]
+    cell_vals = np.stack([values[index] for index in corners], axis=1)      # (M, 8)
+    cell_grads = _corner_gradients(values, corners) if normals else None
     base = cells.astype(np.float32)
 
-    triangles = []
+    triangles, gradients = [], []
     for tet in _TETS:
         v = cell_vals[:, tet]                                           # (M, 4)
-        corners = _CORNERS[list(tet)].astype(np.float32)                # (4, 3)
-        p = base[:, None, :] + corners[None, :, :]                      # (M, 4, 3)
+        offsets = _CORNERS[list(tet)].astype(np.float32)                # (4, 3)
+        p = base[:, None, :] + offsets[None, :, :]                      # (M, 4, 3)
+        g = cell_grads[:, tet] if normals else None                     # (M, 4, 3)
         case = ((v[:, 0] > level) * 1 + (v[:, 1] > level) * 2
                 + (v[:, 2] > level) * 4 + (v[:, 3] > level) * 8)
         for code, tris in _CASE_TRIS.items():
@@ -79,39 +112,21 @@ def marching_tetrahedra(values: np.ndarray, level: float) -> np.ndarray:
             if not sel.any():
                 continue
             vs, ps = v[sel], p[sel]
+            gs = g[sel] if normals else None
             for edges in tris:
-                pts = []
+                pts, grads = [], []
                 for a, b in edges:
-                    t = (level - vs[:, a]) / (vs[:, b] - vs[:, a])
-                    pts.append(ps[:, a] + t[:, None] * (ps[:, b] - ps[:, a]))
+                    t = ((level - vs[:, a]) / (vs[:, b] - vs[:, a]))[:, None]
+                    pts.append(ps[:, a] + t * (ps[:, b] - ps[:, a]))
+                    if normals:
+                        grads.append(gs[:, a] + t * (gs[:, b] - gs[:, a]))
                 triangles.append(np.stack(pts, axis=1))
+                if normals:
+                    gradients.append(np.stack(grads, axis=1))
     if not triangles:
-        return np.zeros((0, 3, 3), dtype=np.float32)
-    return np.concatenate(triangles, axis=0)
-
-
-def _trilinear(grid: np.ndarray, pts: np.ndarray) -> np.ndarray:
-    """Sample *grid* at fractional index positions *pts* (N, 3).
-
-    The corner indices are int32: a grid axis longer than two billion points
-    is not a thing, and at half a million sample points the index arrays are
-    otherwise the largest temporaries in the whole isosurface.
-    """
-    n = np.array(grid.shape)
-    p = np.clip(pts, 0.0, n - 1.0)
-    i0 = np.minimum(p.astype(np.int32), (n - 2).astype(np.int32))
-    f = p - i0
-    x0, y0, z0 = i0[:, 0], i0[:, 1], i0[:, 2]
-    fx, fy, fz = f[:, 0], f[:, 1], f[:, 2]
-    out = np.zeros(len(pts), dtype=np.float32)
-    for dx in (0, 1):
-        wx = fx if dx else 1.0 - fx
-        for dy in (0, 1):
-            wy = fy if dy else 1.0 - fy
-            for dz in (0, 1):
-                wz = fz if dz else 1.0 - fz
-                out += wx * wy * wz * grid[x0 + dx, y0 + dy, z0 + dz]
-    return out
+        return empty, empty.copy()
+    return (np.concatenate(triangles, axis=0),
+            np.concatenate(gradients, axis=0) if normals else empty)
 
 
 def isosurface_mesh(volume: VolumeData, level: float) -> tuple[np.ndarray, np.ndarray]:
@@ -121,16 +136,12 @@ def isosurface_mesh(volume: VolumeData, level: float) -> tuple[np.ndarray, np.nd
     consecutive triples of vertices form triangles. Normals are unit vectors
     pointing away from the enclosed (above-level) region.
     """
-    tris = marching_tetrahedra(volume.values, level)
+    tris, grads = _march(volume.values, level, normals=True)
     verts = tris.reshape(-1, 3)
     if len(verts) == 0:
         empty = np.zeros((0, 3), dtype=np.float32)
         return empty, empty.copy()
-    # one gradient component at a time: all three together is three more
-    # copies of the whole grid, and only one is needed at once
-    field = np.asarray(volume.values, dtype=np.float32)
-    g = np.stack([_trilinear(np.gradient(field, axis=k), verts)
-                  for k in range(3)], axis=1)
+    g = grads.reshape(-1, 3)
     normals = -(g @ np.linalg.inv(volume.axes).T)   # index-space -> world
     norm = np.linalg.norm(normals, axis=1)
     bad = norm < 1e-12

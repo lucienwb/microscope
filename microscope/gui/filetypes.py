@@ -10,7 +10,7 @@ from pathlib import Path
 
 OPEN_FILTER = (
     "Molecular files (*.xyz *.log *.out *.fchk *.fck *.fch *.gjf *.com *.gau "
-    "*.pdb *.molden *.cube *.cub);;All files (*)"
+    "*.pdb *.molden *.molden.input *.cube *.cub);;All files (*)"
 )
 SAVE_FILTER = ("XYZ (*.xyz);;Gaussian input (*.gjf *.com);;"
                "ORCA input (*.inp);;Q-Chem input (*.in *.qcin);;PDB (*.pdb);;"
@@ -38,3 +38,4 @@ def with_extension(path: str, chosen: str, defaults: dict) -> str:
     return path
 
 STYLE_FILTER = "microscope style (*.json);;All files (*)"
+CUBE_FILTER = "Gaussian cube (*.cube *.cub)"

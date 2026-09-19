@@ -1,10 +1,10 @@
 # How it works
 
 microscope **draws what quantum-chemistry programs produced; it never computes
-chemistry itself.** A structure is shown as the file gives it, orbitals come
-from cube files the program wrote, and even the Lewis structure is perceived
-from the geometry rather than recalculated. That rule decides most of what
-follows.
+chemistry itself.** A structure is shown as the file gives it, an orbital is the
+program's own coefficients in the program's own basis set, and even the Lewis
+structure is perceived from the geometry rather than recalculated. That rule
+decides most of what follows.
 
 ## The layers
 
@@ -38,9 +38,44 @@ round at any zoom and a hundred thousand of them cost little. The camera is
 orthographic, so lengths on screen are lengths in the molecule.
 
 Isosurfaces are the exception — they are triangle meshes, extracted by marching
-tetrahedra with normals from the gradient of the field. They are translucent,
-so they are drawn with a depth pre-pass: only the nearest layer is shaded, and
-the back of the surface does not show through as noise.
+tetrahedra. Each vertex sits on an edge between two grid points, and its normal
+is the field's gradient at those two points, interpolated as the vertex is, so
+no gradient of the whole grid is ever made. They are translucent, so they are
+drawn with a depth pre-pass: only the nearest layer is shaded, and the back of
+the surface does not show through as noise.
+
+## Orbitals
+
+An orbital from an fchk or Molden file is a sum of Gaussians, and putting it on
+a grid is arithmetic, the same `cubegen` does. The hard part is reading the file
+the way its program meant it.
+
+- **Conventions are folded in once.** Component order, normalization, pure
+  versus Cartesian functions, and any flipped signs become one small matrix per
+  shell when the file is read, so the evaluator only ever sees bare Cartesian
+  Gaussians.
+- **The file checks the reading.** A program's orbitals are orthonormal in its
+  own basis, so CᵀSC = I, with S the overlap matrix worked out analytically,
+  holds only if every convention was read as meant. Every Gaussian fchk in the
+  test corpus passes to 10⁻⁷ over all its orbitals, virtuals included. For
+  Molden files, where programs disagree, each plausible reading is scored and
+  the best one kept: all 29 test files from seven programs are recognized.
+  That is how Turbomole's habit of scaling d, f and g functions by 3, 15 and 105
+  was found, rather than looked up.
+  Checking takes a spread of up to 600 orbitals and never holds the overlap
+  matrix itself, only one block of it at a time, so memory stays small at any
+  basis size.
+- **A shell is evaluated only where it matters.** On an axis-aligned grid a
+  Gaussian factorizes into one factor per axis, so each shell is built from
+  1-D arrays and joined with one matrix product, over only the box where it can
+  still contribute 10⁻⁶ to this orbital. A 100-atom complex with 750 basis
+  functions takes 0.13 s on a four-million-point grid, and agrees with the
+  point-by-point formula to 10⁻⁶. The box grows when an orbital is still
+  above 0.005 at its walls, which about one frontier orbital in six needs.
+- **Big files stay cheap to open.** The millions of coefficient lines in a
+  large file are found by searching for the few lines that are not numbers,
+  and parsed in blocks: a 1600-function ORCA Molden file opens in 0.7 s,
+  wavefunction check included.
 
 ## Lewis perception
 

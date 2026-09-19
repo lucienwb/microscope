@@ -61,7 +61,8 @@ figures ready for a paper. It installs the short command `scope`.
 
     ---
 
-    Cube files as isosurfaces, with live isovalue and colours.
+    Any orbital of an fchk or Molden wavefunction, or a cube file, with live
+    isovalue and colours.
 
     [:octicons-arrow-right-24: Orbitals and densities](guide/orbitals.md)
 

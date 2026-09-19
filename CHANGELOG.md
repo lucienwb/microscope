@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- **Orbitals straight from the wavefunction.** An `.fchk` or `.molden` file
+  now brings its basis set and orbitals with it. Press `I` for a list of every
+  orbital with its energy and occupation, HOMO first on screen, and step
+  through them with the arrow keys; α and β separately when the wavefunction is
+  unrestricted. `scope -s mol.fchk --mo homo` draws one from the command line,
+  `--mo lumo+1 -o lumo1.cube` writes its grid for other programs without
+  starting any graphics, and `scope mol.fchk --mo homo` opens the viewer on it.
+  An orbital takes a fraction of a second to put on a grid: 0.13 s for a
+  100-atom complex with 750 basis functions
+- The file checks its own reading. A program's orbitals are orthonormal in its
+  basis, so CᵀSC = I holds only if every convention was read as meant. Gaussian
+  fchk files pass to 10⁻⁷ over all orbitals. Molden files are written
+  differently by ORCA, Psi4, CFOUR and Turbomole (primitive norms folded into
+  the coefficients, three ways of normalizing Cartesian d/f/g, ORCA's flipped
+  f/g/h signs), so each reading is scored and the best is kept. All 29 corpus
+  files from seven programs are recognized, and a file that fits none is
+  flagged rather than drawn wrong in silence
+- Any grid on show can be saved as a cube file (Save Cube… in the `I` dialog,
+  `microscope.save_cube` from Python)
+- Molden `[Atoms] (AU)`, with the parentheses some programs write, was read as
+  Ångström; ghost atoms (Z = 0) keep their basis functions but are no longer
+  drawn as atoms; ORCA's `name.molden.input` opens
+- A Molden atom is named by its symbol. With a pseudopotential ORCA writes the
+  core charge in the number column, so a rhodium would have come out as
+  chlorine
+- A file whose orbitals cannot be read still opens as a structure, with the
+  reason in the status bar (and in `ParseResult.warnings`), instead of not
+  opening at all. Pure functions written without a `[5D]` flag are recognized
+  by counting coefficients; a coefficient numbered 0 is refused rather than
+  quietly landing on the last basis function
+- Diffuse orbitals are no longer sliced flat at the edge of the grid: the box
+  grows while an orbital is still above 0.005 at its walls, which about one
+  frontier orbital in six in the test corpus needs
+- Isosurfaces build 2.5 times faster with half the memory: normals come from
+  the gradient at the two grid points around each vertex instead of the
+  gradient of the whole grid, and the cells a surface crosses are found
+  without stacking eight copies of it. A four-million-point orbital meshes in
+  0.4 s instead of 1.0
+- Large wavefunction files open faster and in less memory: a 1600-function
+  ORCA Molden file in 0.7 s instead of 2.4, and an fchk's arrays are parsed
+  straight from the text. The reading check samples at most 600 orbitals and
+  never holds the overlap matrix, which would be 650 MB at 6000 functions
+
 - The README is a front page again: what microscope is, how to install it, how
   to use it, and a link to the documentation site for everything else. It went
   from 439 lines to 88, and every link in it resolves on the live site

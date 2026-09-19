@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self.result: ParseResult | None = None
         self.current_frame = 0
         self._surface_dialog: SurfaceDialog | None = None
+        self._orbital_grids: dict[tuple[str, int], object] = {}   # last few, newest last
         self._style_dialog: StyleDialog | None = None
 
         self.viewport = MoleculeViewport(self)
@@ -139,6 +140,7 @@ class MainWindow(QMainWindow):
         self.result = result
         self.current_frame = result.nframes - 1
         self._edited = False
+        self._orbital_grids.clear()
         if self._surface_dialog is not None:
             self._surface_dialog.close()
             self._surface_dialog = None
@@ -152,6 +154,18 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"Isosurface shown at ±{self.viewport.isovalue:g} — press I to adjust",
                 6000)
+        elif result.orbitals is not None:
+            orbitals = result.orbitals
+            count = orbitals.alpha.nmo + (orbitals.beta.nmo if orbitals.beta else 0)
+            if orbitals.convention == "unrecognized":
+                self.statusBar().showMessage(
+                    f"⚠ {count} orbitals, but this file's basis-set conventions were not "
+                    "recognized — they may be drawn wrong", 10000)
+            else:
+                self.statusBar().showMessage(
+                    f"Wavefunction with {count} orbitals — press I to draw them", 8000)
+        if result.warnings:                  # read, but not all of it
+            self.statusBar().showMessage("⚠ " + "; ".join(result.warnings), 12000)
         name = Path(path).name
         self.setWindowTitle(f"microscope — {name}")
         info = f"{name}  ·  {mol.formula()}  ·  {mol.natoms} atoms  ·  {result.program}"
@@ -451,14 +465,61 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Hydrogen bonds {'shown' if checked else 'hidden'}", 3000)
 
+    ORBITAL_GRIDS_KEPT = 160_000_000     # bytes: a handful of grids, whatever their size
+
+    def _orbital_volume(self, spin: str, index: int):
+        """One orbital on a grid; the last few are kept, so going back is instant."""
+        key = (spin, index)
+        volume = self._orbital_grids.pop(key, None)
+        if volume is None:
+            volume = self.result.orbitals.volume(key)
+        self._orbital_grids[key] = volume
+        while (len(self._orbital_grids) > 1 and sum(
+                v.values.nbytes for v in self._orbital_grids.values()) > self.ORBITAL_GRIDS_KEPT):
+            del self._orbital_grids[next(iter(self._orbital_grids))]
+        return volume
+
+    def show_orbital(self, spec: str) -> None:
+        """Draw an orbital named the way --mo names one: homo, lumo+1, beta:homo, 12;
+        for a cube file holding several grids, the number picks one of those."""
+        orbitals = self.result.orbitals if self.result else None
+        volumes = self.result.volumes if self.result else []
+        if orbitals is None and volumes and str(spec).strip().isdigit():
+            number = int(spec)
+            if 1 <= number <= len(volumes):
+                self.viewport.set_volume(volumes[number - 1])
+            else:
+                held = "one grid" if len(volumes) == 1 else f"{len(volumes)} grids"
+                self.statusBar().showMessage(
+                    f"The cube holds {held}; there is no grid {number}", 6000)
+            return
+        if orbitals is None:
+            reason = ("; ".join(self.result.warnings) if self.result and self.result.warnings
+                      else "orbitals need an .fchk or .molden file")
+            self.statusBar().showMessage(f"No orbitals to draw — {reason}", 8000)
+            return
+        try:
+            spin, index = orbitals.find(spec)
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self.viewport.set_volume(self._orbital_volume(spin, index))
+        self.statusBar().showMessage(
+            f"{orbitals.describe(spin, index)} at ±{self.viewport.isovalue:g} "
+            "— press I for the others", 8000)
+
     def _show_surface_dialog(self):
-        if not self.viewport.has_volume:
+        orbitals = self.result.orbitals if self.result else None
+        if not self.viewport.has_volume and orbitals is None:
             self.statusBar().showMessage(
-                "No volumetric data — open a cube file (.cube/.cub) first", 4000)
+                "Nothing to draw a surface from — open a cube file, or a wavefunction "
+                "(.fchk, .molden) for its orbitals", 5000)
             return
         if self._surface_dialog is None:
             volumes = self.result.volumes if self.result else [self.viewport.volume]
-            self._surface_dialog = SurfaceDialog(self.viewport, volumes, self)
+            self._surface_dialog = SurfaceDialog(
+                self.viewport, volumes, self, orbitals=orbitals,
+                orbital_volume=self._orbital_volume if orbitals is not None else None)
             self._surface_dialog.finished.connect(self._surface_dialog_closed)
         self._surface_dialog.show()
         self._surface_dialog.raise_()
@@ -488,7 +549,7 @@ class MainWindow(QMainWindow):
             "C centers rotation on the selected atom · Home re-centers the molecule<br>"
             "E adjusts the selected distance/angle/dihedral · X deletes atoms<br>"
             "Ctrl+Z / Ctrl+Shift+Z undo/redo · S spectra · Space stops animation<br>"
-            "I opens isosurface controls for cube files (MOs, densities)<br>"
+            "I draws orbitals (fchk, Molden) and cube-file isosurfaces<br>"
             "Shift+L draws the flat Lewis structure (ChemDraw style)")
 
     def dragEnterEvent(self, event):

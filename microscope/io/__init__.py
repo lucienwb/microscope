@@ -9,6 +9,7 @@ from ..core.results import ParseResult
 from . import cclib_bridge, cdxml, cube, fchk, gaussian, molden, molfile, orca, pdbfile, qchem, xyz
 from .errors import FileFormatError, UnsupportedFormatError
 
+CUBE_EXTENSIONS = (".cube", ".cub")
 OPEN_EXTENSIONS = (".xyz", ".log", ".out", ".fchk", ".fck", ".fch",
                    ".gjf", ".com", ".gau", ".pdb", ".molden", ".cube", ".cub")
 
@@ -42,7 +43,7 @@ def load(path) -> ParseResult:
             return gaussian.read_gjf(path)
         if ext == ".pdb":
             return pdbfile.read(path)
-        if ext == ".molden":
+        if ext == ".molden" or path.name.lower().endswith(".molden.input"):
             return molden.read(path)
         if ext in (".cube", ".cub"):
             return cube.read(path)
@@ -101,6 +102,12 @@ def save_molecule(path, molecule: Molecule) -> None:
             f"cannot write {ext!r} files (supported: .xyz, .gjf/.com, "
             ".inp [ORCA], .in/.qcin [Q-Chem], .pdb, .mol/.sdf)"
         )
+
+
+def save_cube(path, volume, molecule: Molecule) -> None:
+    """Write a grid - an orbital put on one, or any loaded volume - as a
+    Gaussian cube file, which every other viewer can open."""
+    cube.write(path, volume, molecule)
 
 
 LEWIS_EXTENSIONS = (".cdxml", ".mol", ".sdf")

@@ -4,9 +4,15 @@ Headless — the rendering itself needs a GL context, so these tests cover
 everything up to the point where pixels are drawn.
 """
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 
+import microscope
 from microscope import cli
 from microscope.core.molecule import Molecule
 from microscope.core.results import ExcitedState, NMRShielding, ParseResult, Vibration
@@ -321,3 +327,66 @@ def test_structure_and_spectrum_flags_do_not_mix():
         ["-s", "x.log", "--ir", "--fwhm", "10", "--size", "800x600"]), parser)
     cli.check_mode_flags(parser.parse_args(
         ["-s", "x.log", "--style", "houk"]), parser)
+
+
+# ----------------------------------------------------------------- orbitals
+
+DATA = Path(__file__).parent / "data"
+
+
+def test_mo_names_an_orbital_of_the_wavefunction():
+    result = microscope.load(DATA / "dvb_ir.fchk")
+    volume = cli.load_volume(_args("-s", "dvb.fchk", "--mo", "lumo+1"), result)
+    assert volume.label.startswith("LUMO+1 · MO 37")
+    assert cli.load_volume(_args("-s", "dvb.fchk"), result) is None    # only when asked
+    with pytest.raises(cli.CliError, match="outside the 60 orbitals"):
+        cli.load_volume(_args("-s", "dvb.fchk", "--mo", "lumo+99"), result)
+
+
+def test_mo_needs_something_to_draw_from():
+    with pytest.raises(cli.CliError, match="wavefunction"):
+        cli.load_volume(_args("-s", "x.xyz", "--mo", "homo"), ParseResult(frames=[_molecule()]))
+
+
+def test_mo_on_a_cube_file_is_the_grid_number():
+    result = microscope.load(DATA / "water_mo.cube")
+    assert cli.load_volume(_args("-s", "w.cube", "--mo", "1"), result) is result.volumes[0]
+    with pytest.raises(cli.CliError, match="it holds one grid"):
+        cli.load_volume(_args("-s", "w.cube", "--mo", "homo"), result)
+
+
+def test_the_viewer_accepts_mo():
+    parser = cli.build_parser()
+    cli.check_gui_flags(parser.parse_args(["dvb.fchk", "--mo", "homo"]), parser)
+
+
+def test_writing_an_orbital_as_a_cube_needs_no_graphics(tmp_path):
+    """-o homo.cube is the grid itself: no Qt, no OpenGL, no matplotlib loaded."""
+    out = tmp_path / "homo.cube"
+    script = (
+        "import sys; from microscope.cli import main;"
+        f"code = main(['-s', 'tests/data/dvb_ir.fchk', '--mo', 'homo', '-o', {str(out)!r}]);"
+        "loaded = [m for m in sys.modules if m.split('.')[0] in "
+        "('PySide6', 'OpenGL', 'matplotlib')];"
+        "print(code, loaded)")
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+    proc = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                          text=True, env=env, cwd=str(Path(__file__).parent.parent))
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().splitlines()[-1] == "0 []", proc.stdout
+    grid = microscope.load(out).volumes[0]
+    direct = microscope.load(DATA / "dvb_ir.fchk").orbitals.volume("homo")
+    assert grid.shape == direct.shape
+    assert np.abs(grid.values - direct.values).max() < 1e-5 * np.abs(direct.values).max() + 1e-9
+    assert grid.label == "HOMO, MO 35, -4.17 eV"          # the cube header stays ASCII
+
+
+def test_a_cube_output_needs_an_orbital(tmp_path, capsys):
+    assert cli.main(["-s", str(DATA / "dvb_ir.fchk"), "-o", str(tmp_path / "x.cube")]) == 2
+    assert "--mo" in capsys.readouterr().err
+
+
+def test_mo_on_a_file_whose_orbitals_failed_says_why():
+    result = ParseResult(frames=[_molecule()], warnings=["the orbitals could not be read: x"])
+    with pytest.raises(cli.CliError, match="could not be read"):
+        cli.load_volume(_args("-s", "broken.molden", "--mo", "homo"), result)

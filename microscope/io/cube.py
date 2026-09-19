@@ -97,3 +97,34 @@ def read(path) -> ParseResult:
                                   label=label))
     return ParseResult(frames=[molecule], program="cube", source=str(path),
                        volumes=volumes)
+
+
+def write(path, volume: VolumeData, molecule: Molecule, comment: str = "") -> None:
+    """Write a grid as a Gaussian cube file, as cubegen lays one out: bohr,
+    z running fastest, six values to a line and a new line for each z-row.
+    VMD, Avogadro, GaussView and the rest read it; so does :func:`read`."""
+    to_bohr = 1.0 / BOHR_TO_ANGSTROM
+    values = np.asarray(volume.values, dtype=np.float32)
+    nx, ny, nz = values.shape
+    out = [_ascii(molecule.title or "microscope"),
+           _ascii(comment or volume.label or "grid"),
+           _cube_row(molecule.natoms, volume.origin * to_bohr)]
+    for n, step in zip(values.shape, volume.axes * to_bohr):
+        out.append(_cube_row(n, step))
+    for z, xyz in zip(molecule.atomic_numbers, molecule.coords * to_bohr):
+        out.append(f"{int(z):5d}{float(z):12.6f}{xyz[0]:12.6f}{xyz[1]:12.6f}{xyz[2]:12.6f}")
+    row = ("%13.5E" * 6 + "\n") * (nz // 6) + ("%13.5E" * (nz % 6) + "\n" if nz % 6 else "")
+    body = "".join(row % tuple(r) for r in values.reshape(nx * ny, nz).tolist())
+    Path(path).write_text("\n".join(out) + "\n" + body, encoding="ascii")
+
+
+def _ascii(text: str) -> str:
+    """Header lines stay ASCII: older readers are Fortran, and a Windows
+    locale cannot even encode an alpha."""
+    text = " ".join(text.split())                  # one line, whatever the title held
+    text = text.replace(" · ", ", ").replace("α", "alpha").replace("β", "beta")
+    return text.encode("ascii", "replace").decode().strip()[:80]
+
+
+def _cube_row(n: int, vector) -> str:
+    return f"{n:5d}{vector[0]:12.6f}{vector[1]:12.6f}{vector[2]:12.6f}"

@@ -19,7 +19,7 @@ __all__ = ["MainWindow", "main"]
 
 def main(path: str | None = None, style: str = "cylview",
          label_mode: str = "none", axes: bool = False, lewis: bool = False,
-         lewis_options: dict | None = None) -> int:
+         lewis_options: dict | None = None, orbital: str | None = None) -> int:
     """Open the viewer window. Returns the Qt exit code.
 
     The optional arguments are the handful of `scope` flags that make sense
@@ -47,6 +47,8 @@ def main(path: str | None = None, style: str = "cylview",
         window._axes_action.setChecked(True)      # toggled -> viewport
     if path:
         window.open_file(path)
+        if orbital:
+            window.show_orbital(orbital)
     for name, value in (lewis_options or {}).items():
         window._lewis_options[name].setChecked(bool(value))
     if lewis:

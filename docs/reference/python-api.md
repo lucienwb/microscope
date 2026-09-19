@@ -18,6 +18,10 @@ lewis = microscope.perceive(mol)             # bond orders, charges, lone pairs
 print(lewis.total_charge, lewis.matches_file)
 
 microscope.save_molecule("next_job.gjf", mol)
+
+wavefunction = microscope.load("mycalc.fchk").orbitals
+homo = wavefunction.volume("homo")          # the HOMO on a grid, as a VolumeData
+microscope.save_cube("homo.cube", homo, mol)
 ```
 
 The names documented here are the supported surface, listed in
@@ -30,6 +34,8 @@ The names documented here are the supported surface, listed in
 ::: microscope.save_molecule
 
 ::: microscope.save_lewis
+
+::: microscope.save_cube
 
 ## What a file gives you
 
@@ -51,6 +57,25 @@ The names documented here are the supported surface, listed in
 ::: microscope.NMRShielding
 
 ::: microscope.VolumeData
+
+## Orbitals
+
+::: microscope.Orbitals
+    options:
+      members:
+        - find
+        - volume
+        - name
+        - describe
+        - restricted
+        - spin
+        - orthonormality_error
+
+::: microscope.OrbitalSet
+    options:
+      members:
+        - nmo
+        - homo
 
 ## Lewis structures
 

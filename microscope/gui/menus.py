@@ -106,7 +106,7 @@ def build_menus(window):
     window._axes_action.toggled.connect(window._toggle_axes)
     view_menu.addAction(window._axes_action)
 
-    add_action(window, view_menu, "&Isosurface…", "I", window._show_surface_dialog)
+    add_action(window, view_menu, "&Orbitals && Isosurface…", "I", window._show_surface_dialog)
 
     lewis_menu = view_menu.addMenu("&Lewis Structure")
     window._lewis_action = QAction("Show &Lewis Structure (2D)", window,

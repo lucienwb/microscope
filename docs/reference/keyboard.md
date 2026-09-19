@@ -39,7 +39,7 @@ On macOS, read ++ctrl++ as ++cmd++.
 | Keys | What it does |
 |---|---|
 | ++shift+l++ | Lewis structure mode; drag turns it, ++shift++-drag spins it |
-| ++i++ | isosurface controls |
+| ++i++ | orbitals and isosurface controls |
 | ++s++ | the spectra panel |
 | ++space++ | stop a vibration animation |
 | ++ctrl+o++ | open |

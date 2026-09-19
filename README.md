@@ -66,7 +66,7 @@ Each links to the page that shows it working.
 - [Move and edit](https://lucienwb.github.io/microscope/guide/editing/) — drag a fragment along an axis or turn it, with undo
 - [Mixed representations](https://lucienwb.github.io/microscope/guide/representations/) — ball-and-stick where it matters, lines elsewhere
 - [Lewis structures](https://lucienwb.github.io/microscope/guide/lewis/) — flat, ChemDraw-style, out to `.cdxml`, `.mol`, SVG or PDF
-- [Orbitals and densities](https://lucienwb.github.io/microscope/guide/orbitals/) — cube files as isosurfaces
+- [Orbitals and densities](https://lucienwb.github.io/microscope/guide/orbitals/) — any orbital of an fchk or Molden file, or a cube file
 - [Trajectories and vibrations](https://lucienwb.github.io/microscope/guide/trajectories/) — scans played back, normal modes animated
 - [Spectra](https://lucienwb.github.io/microscope/guide/spectra/) — IR, UV-Vis and NMR; click a band to see the mode
 

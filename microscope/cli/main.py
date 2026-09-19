@@ -35,7 +35,7 @@ def launch_gui(args) -> int:
     from .lewis import lewis_option_dict
     return gui_main(args.file, style=args.style, label_mode=args.labels,
                     axes=args.axes, lewis=args.lewis,
-                    lewis_options=lewis_option_dict(args))
+                    lewis_options=lewis_option_dict(args), orbital=args.mo)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from PySide6.QtCore import QBuffer
-from PySide6.QtGui import QGuiApplication, QPainter
+from PySide6.QtGui import QColor, QGuiApplication, QPainter
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
@@ -51,15 +51,22 @@ def _to_pil(qimage) -> Image.Image:
 
 
 def _shot(molecule, camera, *, style="cylview", reps=None, volume=None,
-          iso=None, overlay=None) -> Image.Image:
+          iso=None, overlay=None, caption=None) -> Image.Image:
     """One frame: the molecule as rendered, plus whatever the viewer draws on top."""
     image = render_molecule_image(molecule, make_style(style), camera, W, H,
                                   supersample=2, transparent=False,
                                   volume=volume, isovalue=iso, reps=reps)
-    if overlay:
+    if overlay or caption:
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        annotations.draw_overlay(painter, molecule, camera, W, H, **overlay)
+        if overlay:
+            annotations.draw_overlay(painter, molecule, camera, W, H, **overlay)
+        if caption:           # what the viewer's orbital list says about it
+            font = painter.font()
+            font.setPixelSize(15)
+            painter.setFont(font)
+            painter.setPen(QColor(60, 60, 60))
+            painter.drawText(16, H - 16, caption)
         painter.end()
     return _to_pil(image)
 
@@ -212,6 +219,19 @@ def isosurface():
     _save(frames, "isosurface.gif", ms=90)
 
 
+def orbitals():
+    """I: step through the orbitals of a wavefunction file."""
+    result, mol = _load("dvb_ir.fchk")
+    cam = _camera(mol, zoom=1.1)
+    cam.rotate_drag(40, -70)
+    frames = []
+    for which in ("homo-2", "homo-1", "homo", "lumo", "lumo+1"):
+        volume = result.orbitals.volume(which)
+        frames.append(_shot(mol, cam, volume=volume, iso=0.03, caption=volume.label))
+        _hold(frames, 11)          # the viewer holds still too, as you step the list
+    _save(frames, "orbitals.gif", ms=100)
+
+
 def vibrate():
     """Click an IR band: the molecule walks through that normal mode."""
     result, mol = _load("dvb_ir.out")
@@ -307,7 +327,7 @@ def style():
 
 
 CLIPS = {f.__name__: f for f in (orbit, styles, style, regions, labels, measure,
-                                 handles, axes, isosurface, vibrate,
+                                 handles, axes, orbitals, isosurface, vibrate,
                                  trajectory, lewis, lewis_options)}
 
 

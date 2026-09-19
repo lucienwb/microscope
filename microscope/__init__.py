@@ -20,19 +20,20 @@ __version__ = "0.1.0"
 
 from .core.lewis import LewisStructure, perceive
 from .core.molecule import Molecule
+from .core.orbitals import Orbitals, OrbitalSet
 from .core.results import ExcitedState, NMRShielding, ParseResult, Vibration
 from .core.volume import VolumeData
-from .io import load, save_lewis, save_molecule
+from .io import load, save_cube, save_lewis, save_molecule
 from .io.errors import FileFormatError, UnsupportedFormatError
 from .render.styles import Style, StyleError, load_style, save_style
 
 __all__ = [
     "__version__",
     # reading and writing
-    "load", "save_molecule", "save_lewis",
+    "load", "save_molecule", "save_lewis", "save_cube",
     # what you get back
     "Molecule", "ParseResult", "Vibration", "ExcitedState", "NMRShielding",
-    "VolumeData",
+    "VolumeData", "Orbitals", "OrbitalSet",
     # Lewis-structure perception
     "perceive", "LewisStructure",
     # rendering styles, savable as files a group can share

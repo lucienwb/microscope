@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import io as mio
-from ..render.imagefile import write_image
 from .parsing import (
     CliError,
     build_camera,
@@ -26,13 +25,17 @@ def render(args) -> str:
         raise CliError("give a file to render, e.g. scope -s mycalc.log")
     if not Path(args.file).is_file():          # before Qt starts up
         raise FileNotFoundError(args.file)
-    out = check_output(args.output or default_output(args.file))
+    out = args.output or default_output(args.file)
+    if Path(out).suffix.lower() in mio.CUBE_EXTENSIONS:
+        return write_cube(args, out)
+    out = check_output(out)
 
     from .main import _ensure_qt_app
     _ensure_qt_app()
     from PySide6.QtGui import QPainter
 
     from ..gui.annotations import draw_annotations
+    from ..render.imagefile import write_image
     from ..render.offscreen import render_molecule_image
 
     result = mio.load(args.file)
@@ -71,4 +74,16 @@ def render(args) -> str:
         painter.end()
 
     write_image(image, out)
+    return out
+
+
+def write_cube(args, out: str) -> str:
+    """`-o homo.cube`: write the grid itself for another program, drawing
+    nothing - so no Qt and no OpenGL."""
+    result = mio.load(args.file)
+    volume = load_volume(args, result)
+    if volume is None:
+        raise CliError("a .cube output is the grid of an orbital: choose one "
+                       "with --mo, e.g. --mo homo")
+    mio.save_cube(out, volume, result.molecule)
     return out

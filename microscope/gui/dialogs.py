@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+import numpy as np
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QFontDatabase
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -21,6 +23,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -28,9 +31,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import io as mio
 from ..core import elements, geometry
+from ..core.orbitals import HARTREE_TO_EV
 from ..render.styles import StyleError, load_style, save_style
-from .filetypes import STYLE_FILTER
+from .filetypes import CUBE_FILTER, STYLE_FILTER
 from .viewport import MoleculeViewport
 
 # Curated isosurface color pairs (+ lobe, - lobe); custom colors via the picker.
@@ -144,16 +149,28 @@ class AdjustDialog(QDialog):
 
 
 class SurfaceDialog(QDialog):
-    """Modeless isosurface controls for the loaded cube file (live update)."""
+    """Modeless isosurface controls (live update): the grids a cube file holds,
+    or the orbitals of a wavefunction file, put on a grid as they are chosen.
 
-    def __init__(self, viewport: MoleculeViewport, volumes: list, parent=None):
+    ``orbital_volume(spin, index)`` makes the grid for one orbital; the window
+    passes its own, which keeps the last few so stepping back is instant.
+    """
+
+    DEBOUNCE_MS = 120      # holding an arrow key moves the list, not the CPU
+
+    def __init__(self, viewport: MoleculeViewport, volumes: list, parent=None,
+                 orbitals=None, orbital_volume=None):
         super().__init__(parent)
         self.viewport = viewport
         self.volumes = volumes
-        self.setWindowTitle("Isosurface")
+        self.orbitals = orbitals
+        self.orbital_volume = orbital_volume
+        self.setWindowTitle("Orbitals & Isosurface" if orbitals else "Isosurface")
         layout = QFormLayout(self)
 
-        if len(volumes) > 1:
+        if orbitals is not None:
+            self._build_orbital_list(layout)
+        elif len(volumes) > 1:
             self.which = QComboBox()
             self.which.addItems([v.label or f"grid {i + 1}"
                                  for i, v in enumerate(volumes)])
@@ -215,12 +232,113 @@ class SurfaceDialog(QDialog):
         layout.addRow(self.visible)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        save = buttons.addButton("Save Cube…", QDialogButtonBox.ButtonRole.ActionRole)
+        save.setToolTip("Write the grid on show as a Gaussian cube file")
+        save.clicked.connect(self._save_cube)
         buttons.rejected.connect(self.close)
-        buttons.clicked.connect(self.close)
         layout.addRow(buttons)
+
+        if orbitals is not None:
+            self._select_start()
 
     def _switch_volume(self, index: int):
         self.viewport.set_volume(self.volumes[index], isovalue=self.iso.value())
+
+    # ---------------------------------------------------------------- orbitals
+
+    def _build_orbital_list(self, layout: QFormLayout):
+        if self.orbitals.convention == "unrecognized":
+            warning = QLabel("⚠ This file's basis-set conventions were not recognized:\n"
+                             "its orbitals may be drawn wrong.")
+            warning.setStyleSheet("color: #b35c00;")
+            layout.addRow(warning)
+        if not self.orbitals.restricted:
+            self.spin_box = QComboBox()
+            self.spin_box.addItems(["α (alpha)", "β (beta)"])
+            self.spin_box.currentIndexChanged.connect(self._spin_changed)
+            layout.addRow("Spin:", self.spin_box)
+        self.orbital_list = QListWidget()
+        self.orbital_list.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.orbital_list.setMinimumSize(340, 260)
+        self.orbital_list.currentRowChanged.connect(self._orbital_row_changed)
+        layout.addRow(self.orbital_list)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._show_chosen_orbital)
+        self._spin = "alpha"
+        self._fill_orbitals()
+
+    def _fill_orbitals(self):
+        orbitals = self.orbitals.spin(self._spin)
+        self.orbital_list.blockSignals(True)
+        self.orbital_list.clear()
+        for index in range(orbitals.nmo):
+            energy = float(orbitals.energies[index]) * HARTREE_TO_EV
+            shown = f"{energy:>10.2f} eV" if np.isfinite(energy) else " " * 13
+            text = (f"{self.orbitals.name(self._spin, index):<8} {index + 1:>5}"
+                    f"{shown}   occ {float(orbitals.occupations[index]):g}")
+            if index < len(orbitals.symmetries) and orbitals.symmetries[index]:
+                text += f"   {orbitals.symmetries[index]}"
+            self.orbital_list.addItem(text)
+        self.orbital_list.blockSignals(False)
+
+    def _select_start(self):
+        """The orbital on show if it is one, else the HOMO."""
+        meta = self.viewport.volume.meta if self.viewport.has_volume else {}
+        if "orbital" in meta:
+            if meta.get("spin") == "beta" and hasattr(self, "spin_box"):
+                self.spin_box.setCurrentIndex(1)
+            row = meta["orbital"]
+        else:
+            row = max(self.orbitals.spin(self._spin).homo, 0)
+        self.orbital_list.setCurrentRow(row)
+        self.orbital_list.scrollToItem(self.orbital_list.item(row),
+                                       QListWidget.ScrollHint.PositionAtCenter)
+        self._timer.stop()
+        if "orbital" not in meta:
+            self._show_chosen_orbital()
+
+    def _spin_changed(self, index: int):
+        self._spin = "beta" if index == 1 else "alpha"
+        row = self.orbital_list.currentRow()
+        self._fill_orbitals()
+        self.orbital_list.setCurrentRow(min(max(row, 0), self.orbital_list.count() - 1))
+
+    def _orbital_row_changed(self, _row: int):
+        self._timer.start(self.DEBOUNCE_MS)
+
+    def _show_chosen_orbital(self):
+        row = self.orbital_list.currentRow()
+        if row < 0 or self.orbital_volume is None:
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            volume = self.orbital_volume(self._spin, row)
+        finally:
+            QApplication.restoreOverrideCursor()
+        keep = self.viewport.isovalue if self.viewport.has_volume else None
+        self.viewport.set_volume(volume, isovalue=keep)
+        for widget, set_value in ((self.iso, lambda: self.iso.setValue(self.viewport.isovalue)),
+                                  (self.visible, lambda: self.visible.setChecked(True))):
+            widget.blockSignals(True)       # the viewport already has both
+            set_value()
+            widget.blockSignals(False)
+
+    def _save_cube(self):
+        if not self.viewport.has_volume or self.viewport.molecule is None:
+            return
+        volume = self.viewport.volume
+        name = volume.label.split(" · ")[0].replace(" ", "_") or "grid"
+        path, _ = QFileDialog.getSaveFileName(self, "Save Cube File", f"{name}.cube",
+                                              CUBE_FILTER)
+        if not path:
+            return
+        if not Path(path).suffix:
+            path += ".cube"
+        try:
+            mio.save_cube(path, volume, self.viewport.molecule)
+        except OSError as exc:
+            QMessageBox.warning(self, "Save Cube File", f"Could not write {path}:\n{exc}")
 
     # ------------------------------------------------------------------ colors
 

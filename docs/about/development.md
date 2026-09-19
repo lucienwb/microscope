@@ -19,6 +19,9 @@ mypy                                    # types (the Qt widgets are excluded)
 The tests need no display and no OpenGL — no test may construct a Qt
 application — so they run the same on a laptop and a CI runner. Parser tests
 use real program outputs from the cclib test suite, kept in `tests/data/`.
+Molden files are written in each program's own dialect by the tests
+themselves, from orbitals known to be orthonormal, so every reading the Molden
+reader can choose is exercised without borrowing anyone's files.
 
 Ruff's name checks earn their keep in a codebase that moves code between
 modules: a name used but never imported is exactly what slips through a
