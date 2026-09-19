@@ -7,8 +7,6 @@ vibrational mode; clicking it again (or clicking elsewhere) stops it.
 from __future__ import annotations
 
 import numpy as np
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -34,6 +32,11 @@ class _SpectrumTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # matplotlib is half the viewer's start-up time, and most files have no
+        # spectrum at all: it is loaded when the first tab is made, not before
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.figure import Figure
+
         self.figure = Figure(figsize=(5.0, 2.6), tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)

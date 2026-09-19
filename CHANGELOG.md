@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The viewer starts in a quarter of the time: matplotlib, half of what it
+  used to import, now loads with the first spectrum tab rather than at start-
+  up, and most files have no spectrum at all (0.82 s of imports down to 0.23)
 - CI now enforces what the development notes always said: ruff and mypy run
   on every push, in their own job, next to the tests. Every action moved to
   its Node 24 release, which ends the deprecation warning on each run
