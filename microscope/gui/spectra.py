@@ -72,7 +72,8 @@ class _SpectrumTab(QWidget):
             return
         import pandas as pd
         pd.DataFrame({self._spec.xlabel: self._spec.x,
-                      self._spec.ylabel: self._spec.y}).to_csv(path, index=False)
+                      self._spec.ylabel: self._spec.y}).to_csv(
+            path, index=False, encoding="utf-8-sig")        # Excel needs the BOM for cm⁻¹
 
     def export_png(self):
         path, _ = QFileDialog.getSaveFileName(

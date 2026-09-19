@@ -96,5 +96,5 @@ def plot_spectrum(args) -> str:
     if args.csv:
         import pandas as pd
         pd.DataFrame({spec.xlabel: spec.x, spec.ylabel: spec.y}).to_csv(
-            args.csv, index=False)
+            args.csv, index=False, encoding="utf-8-sig")
     return out
