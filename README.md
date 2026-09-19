@@ -6,6 +6,12 @@ ORCA and Q-Chem outputs, `xyz`, `pdb`, `fchk`, Molden and cube files — and tur
 them into 3-D structures, interactive spectra, editable geometries,
 ChemDraw-style Lewis structures, and figures ready for a paper.
 
+> **Why does this exist?** Because one figure used to cost me six programs and a
+> coffee: a viewer, `cubegen`, another viewer, a spreadsheet, ChemDraw, and
+> PowerPoint to glue it together in fonts that never match. I had become a
+> file-format translator who occasionally did chemistry. Now it's
+> `scope mycalc.log`.
+
 ### Documentation: **[lucienwb.github.io/microscope](https://lucienwb.github.io/microscope/)**
 
 ![tryptophan rendered by microscope](docs/assets/hero.png)
