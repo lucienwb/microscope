@@ -416,3 +416,55 @@ def _orbital_set_with(nmo: int, homo: int):
     occupations[:homo + 1] = 2
     coefficients = np.arange(nmo, dtype=np.float32)[:, None] * np.ones((1, 3), np.float32)
     return OrbitalSet(np.zeros(nmo), occupations, coefficients)
+
+
+# ------------------------------------------------------ energy-level diagram
+
+def test_the_level_diagram_shows_the_frontier():
+    from microscope.core.orbitals import HARTREE_TO_EV
+    from microscope.render.levels import level_diagram
+
+    orbitals = microscope.load(DATA / "dvb_ir.fchk").orbitals
+    diagram = level_diagram(orbitals, window=5)
+    names = [lv.name for lv in sorted(diagram.levels, key=lambda lv: lv.index)]
+    assert names == [f"HOMO-{k}" for k in range(4, 0, -1)] + ["HOMO", "LUMO"] + \
+        [f"LUMO+{k}" for k in range(1, 5)]
+    assert {lv.electrons for lv in diagram.levels if lv.name.startswith("HOMO")} == {2}
+    assert {lv.electrons for lv in diagram.levels if lv.name.startswith("LUMO")} == {0}
+    energies = orbitals.alpha.energies
+    assert diagram.gaps["alpha"] == pytest.approx((energies[35] - energies[34]) * HARTREE_TO_EV)
+    # a far-away orbital on show brings its neighbourhood into the diagram
+    far = level_diagram(orbitals, around=("alpha", 2), window=5)
+    assert {1, 2, 3} <= {lv.index for lv in far.levels}
+
+
+def test_an_unrestricted_diagram_has_two_columns_of_single_electrons():
+    from microscope.render.levels import level_diagram
+
+    diagram = level_diagram(microscope.load(DATA / "dvb_un_sp.fchk").orbitals)
+    assert diagram.columns == 2 and set(diagram.gaps) == {"alpha", "beta"}
+    assert {lv.electrons for lv in diagram.levels} == {0, 1}
+    assert {lv.column for lv in diagram.levels if lv.spin == "beta"} == {1}
+
+
+def test_degenerate_orbitals_are_counted_and_crowded_ones_drawn_side_by_side():
+    from microscope.core.orbitals import Orbitals, OrbitalSet
+    from microscope.render.levels import level_diagram, side_by_side
+
+    energies = np.array([-0.50, -0.30, -0.30, -0.30, 0.10, 0.25])     # a t2g-like trio
+    occupations = np.array([2, 2, 2, 2, 0, 0], dtype=np.float32)
+    orbitals = Orbitals(B.BasisSet([]), OrbitalSet(energies, occupations,
+                                                   np.zeros((6, 0), np.float32)))
+    trio = [lv for lv in level_diagram(orbitals).levels if lv.index in (1, 2, 3)]
+    assert [lv.degenerate for lv in trio] == [3, 3, 3]
+    # heights on screen: the lower level of a close pair goes left
+    assert side_by_side([100.0, 104.0, 200.0], apart=15) == [(1, 2), (0, 2), (0, 1)]
+
+
+def test_a_file_without_orbital_energies_draws_no_levels():
+    from microscope.core.orbitals import Orbitals, OrbitalSet
+    from microscope.render.levels import level_diagram
+
+    orbitals = Orbitals(B.BasisSet([]), OrbitalSet(np.full(4, np.nan), np.zeros(4, np.float32),
+                                                   np.zeros((4, 0), np.float32)))
+    assert level_diagram(orbitals).levels == []

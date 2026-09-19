@@ -15,6 +15,14 @@ drawn, and the arrow keys step through the rest.
 - **Save Cube…** writes the orbital on show as a cube file, for VMD, GaussView
   or anything else
 
+Beside the list is the **energy-level diagram**: occupied levels with their
+electrons, the virtual ones in grey, degenerate orbitals side by side, and the
+HOMO–LUMO gap measured, in two columns, α and β, for an unrestricted
+wavefunction. Click a level to draw that orbital. **Save Levels…** writes the
+diagram as PNG, SVG or PDF, ready for a figure.
+
+![the energy-level diagram of divinylbenzene, HOMO picked](../assets/levels.png){ width="300" }
+
 The orbital is the program's own: its basis set and its coefficients, put on a
 grid the way `cubegen` or `orca_plot` would. For a 100-atom complex with 750
 basis functions an orbital is on screen in about half a second, and the last few

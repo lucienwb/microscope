@@ -34,8 +34,17 @@ from PySide6.QtWidgets import (
 from .. import io as mio
 from ..core import elements, geometry
 from ..core.orbitals import HARTREE_TO_EV
+from ..render.levels import level_diagram
+from ..render.levelsdraw import write_levels
 from ..render.styles import StyleError, load_style, save_style
-from .filetypes import CUBE_FILTER, STYLE_FILTER
+from .filetypes import (
+    _LEVELS_DEFAULT_EXT,
+    CUBE_FILTER,
+    LEVELS_FILTER,
+    STYLE_FILTER,
+    with_extension,
+)
+from .levelsview import LevelsView
 from .viewport import MoleculeViewport
 
 # Curated isosurface color pairs (+ lobe, - lobe); custom colors via the picker.
@@ -235,6 +244,10 @@ class SurfaceDialog(QDialog):
         save = buttons.addButton("Save Cube…", QDialogButtonBox.ButtonRole.ActionRole)
         save.setToolTip("Write the grid on show as a Gaussian cube file")
         save.clicked.connect(self._save_cube)
+        if orbitals is not None:
+            levels = buttons.addButton("Save Levels…", QDialogButtonBox.ButtonRole.ActionRole)
+            levels.setToolTip("Write the energy-level diagram as PNG, SVG or PDF")
+            levels.clicked.connect(self._save_levels)
         buttons.rejected.connect(self.close)
         layout.addRow(buttons)
 
@@ -261,7 +274,14 @@ class SurfaceDialog(QDialog):
         self.orbital_list.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self.orbital_list.setMinimumSize(340, 260)
         self.orbital_list.currentRowChanged.connect(self._orbital_row_changed)
-        layout.addRow(self.orbital_list)
+        self.levels_view = LevelsView()
+        self.levels_view.picked.connect(self._level_picked)
+        side_by_side = QWidget()
+        row = QHBoxLayout(side_by_side)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.orbital_list, 3)
+        row.addWidget(self.levels_view, 2)
+        layout.addRow(side_by_side)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._show_chosen_orbital)
@@ -304,8 +324,28 @@ class SurfaceDialog(QDialog):
         self._fill_orbitals()
         self.orbital_list.setCurrentRow(min(max(row, 0), self.orbital_list.count() - 1))
 
-    def _orbital_row_changed(self, _row: int):
+    def _orbital_row_changed(self, row: int):
         self._timer.start(self.DEBOUNCE_MS)
+        chosen = (self._spin, row) if row >= 0 else None
+        self._levels = level_diagram(self.orbitals, around=chosen)
+        self.levels_view.show_diagram(self._levels, chosen)
+
+    def _level_picked(self, spin: str, index: int):
+        """A level clicked in the diagram: that orbital, in the list and on screen."""
+        if spin != self._spin and hasattr(self, "spin_box"):
+            self.spin_box.setCurrentIndex(1 if spin == "beta" else 0)
+        self.orbital_list.setCurrentRow(index)
+
+    def _save_levels(self):
+        path, chosen = QFileDialog.getSaveFileName(self, "Save Energy Levels", "levels.png",
+                                                   LEVELS_FILTER)
+        if not path:
+            return
+        path = with_extension(path, chosen, _LEVELS_DEFAULT_EXT)
+        try:
+            write_levels(path, self._levels, picked=self.levels_view.chosen)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Save Energy Levels", f"Could not write {path}:\n{exc}")
 
     def _show_chosen_orbital(self):
         row = self.orbital_list.currentRow()

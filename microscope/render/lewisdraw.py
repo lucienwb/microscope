@@ -10,22 +10,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QMarginsF, QPointF, QRect, QSize, QSizeF, Qt
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
     QFontMetricsF,
     QImage,
-    QPageSize,
     QPainter,
-    QPdfWriter,
     QPen,
 )
 
 from ..core.lewis import LewisStructure
 from .camera import OrthoCamera
 from .formats import VECTOR_SUFFIXES
+from .imagefile import vector_device
 from .lewis2d import LewisLayout, LewisOptions, layout
 
 # ChemDraw sets structures in Arial; Qt substitutes on machines without it.
@@ -167,10 +166,8 @@ def write_lewis_vector(path, structure: LewisStructure, camera: OrthoCamera,
                        background=None) -> None:
     """Write the drawing to SVG or PDF at *width* x *height* points."""
     suffix = Path(path).suffix.lower()
-    if suffix == ".svg":
-        device = _svg_device(path, width, height)
-    elif suffix == ".pdf":
-        device = _pdf_device(path, width, height)
+    if suffix in VECTOR_SUFFIXES:
+        device = vector_device(path, width, height, "Lewis structure")
     else:
         raise ValueError(f"cannot write {suffix or 'that'} as vector art "
                          f"(use {' or '.join(VECTOR_SUFFIXES)})")
@@ -181,24 +178,3 @@ def write_lewis_vector(path, structure: LewisStructure, camera: OrthoCamera,
         draw_lewis(painter, structure, camera, int(width), int(height), options)
     finally:
         painter.end()
-
-
-def _svg_device(path, width: int, height: int):
-    from PySide6.QtSvg import QSvgGenerator  # QtSvg is a separate module
-
-    generator = QSvgGenerator()
-    generator.setFileName(str(path))
-    generator.setSize(QSize(int(width), int(height)))
-    generator.setViewBox(QRect(0, 0, int(width), int(height)))
-    generator.setTitle("Lewis structure")
-    generator.setDescription("Drawn by microscope")
-    return generator
-
-
-def _pdf_device(path, width: int, height: int):
-    writer = QPdfWriter(str(path))
-    writer.setResolution(72)                          # one unit is one point
-    writer.setPageSize(QPageSize(QSizeF(width, height), QPageSize.Unit.Point,
-                                 "figure", QPageSize.SizeMatchPolicy.ExactMatch))
-    writer.setPageMargins(QMarginsF(0, 0, 0, 0))
-    return writer

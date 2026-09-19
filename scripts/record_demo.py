@@ -232,6 +232,17 @@ def orbitals():
     _save(frames, "orbitals.gif", ms=100)
 
 
+def levels():
+    """I: the orbital energy-level diagram beside the orbital list."""
+    from microscope.render.levels import level_diagram
+    from microscope.render.levelsdraw import write_levels
+
+    result, _ = _load("dvb_ir.fchk")
+    path = OUT / "levels.png"
+    write_levels(path, level_diagram(result.orbitals), picked=("alpha", 34))
+    print(f"  {path.relative_to(REPO)}  {path.stat().st_size / 1024:.0f} KB")
+
+
 def vibrate():
     """Click an IR band: the molecule walks through that normal mode."""
     result, mol = _load("dvb_ir.out")
@@ -327,7 +338,7 @@ def style():
 
 
 CLIPS = {f.__name__: f for f in (orbit, styles, style, regions, labels, measure,
-                                 handles, axes, orbitals, isosurface, vibrate,
+                                 handles, axes, orbitals, levels, isosurface, vibrate,
                                  trajectory, lewis, lewis_options)}
 
 

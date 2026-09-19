@@ -39,3 +39,6 @@ def with_extension(path: str, chosen: str, defaults: dict) -> str:
 
 STYLE_FILTER = "microscope style (*.json);;All files (*)"
 CUBE_FILTER = "Gaussian cube (*.cube *.cub)"
+# the energy-level diagram is line art too
+LEVELS_FILTER = "PNG image (*.png);;SVG drawing (*.svg);;PDF (*.pdf)"
+_LEVELS_DEFAULT_EXT = {"PNG": ".png", "SVG": ".svg", "PDF": ".pdf"}

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Orbital energy-level diagram** beside the orbital list (`I`): occupied
+  levels with their electrons, virtual ones in grey, degenerate orbitals side
+  by side, the HOMO-LUMO gap measured, α and β in two columns when the
+  wavefunction is unrestricted. Clicking a level draws that orbital, and Save
+  Levels… writes the diagram as PNG, SVG or PDF. Levels too close to tell
+  apart at the scale drawn go side by side rather than on top of each other
 - Files open in the background: reading and bond perception run on a worker
   thread, so a big file no longer freezes the window. On a 98,000-atom protein
   the longest pause went from 1.6 s to a quarter of a second, the scene being
