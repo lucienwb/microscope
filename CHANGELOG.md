@@ -31,7 +31,8 @@
   reason in the status bar (and in `ParseResult.warnings`), instead of not
   opening at all. Pure functions written without a `[5D]` flag are recognized
   by counting coefficients; a coefficient numbered 0 is refused rather than
-  quietly landing on the last basis function
+  quietly landing on the last basis function; and a file that crossed between
+  Windows and Unix twice, with a blank line after every line, still reads
 - Diffuse orbitals are no longer sliced flat at the edge of the grid: the box
   grows while an orbital is still above 0.005 at its walls, which about one
   frontier orbital in six in the test corpus needs

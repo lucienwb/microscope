@@ -351,12 +351,18 @@ def test_a_coefficient_numbered_zero_is_refused(tmp_path):
     assert result.orbitals is None and "counts from 1" in result.warnings[0]
 
 
-def test_windows_line_endings_read_the_same(tmp_path):
+@pytest.mark.parametrize("ending", ["\r\n", "\r\r\n"], ids=["crlf", "crlf-twice"])
+def test_windows_line_endings_read_the_same(tmp_path, ending):
+    """CRLF, and the CR CR LF a file gets from crossing between Windows and
+    Unix twice. Written as bytes: write_text would translate the endings
+    again on Windows."""
     plain = microscope.load(_small_molden(tmp_path)).orbitals
-    crlf = microscope.load(_small_molden(tmp_path, "crlf.molden",
-                                         edit=lambda t: t.replace("\n", "\r\n"))).orbitals
-    assert crlf.convention == plain.convention == "standard"
-    assert np.array_equal(crlf.alpha.coefficients, plain.alpha.coefficients)
+    text = (tmp_path / "small.molden").read_bytes().decode().replace("\r\n", "\n")
+    path = tmp_path / "windows.molden"
+    path.write_bytes(text.replace("\n", ending).encode())
+    windows = microscope.load(path).orbitals
+    assert windows.convention == plain.convention == "standard"
+    assert np.array_equal(windows.alpha.coefficients, plain.alpha.coefficients)
 
 
 def test_homo_needs_occupations(tmp_path):

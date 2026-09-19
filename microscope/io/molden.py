@@ -280,21 +280,22 @@ TIE = 4.0               # readings within this factor of the best are as good
 
 
 def _read_gto(body: list[str]) -> list[_RawShell]:
+    # Blank lines carry nothing here - each atom's shells start with its own
+    # number - and a file that crossed between Windows and Unix twice has one
+    # after every line, primitives included.
+    lines = [line.split() for line in body if line.strip()]
     shells: list[_RawShell] = []
     atom = 0
     i = 0
-    while i < len(body):
-        parts = body[i].split()
+    while i < len(lines):
+        parts = lines[i]
         i += 1
-        if not parts:
-            continue
         if parts[0].isdigit():                 # "  3 0": the next atom's shells
             atom = int(parts[0])
             continue
         label, nprim = parts[0].lower(), int(parts[1])
         scale = _number(parts[2]) if len(parts) > 2 else 1.0
-        rows = np.array([[_number(tok) for tok in body[i + k].split()]
-                         for k in range(nprim)])
+        rows = np.array([[_number(tok) for tok in lines[i + k]] for k in range(nprim)])
         i += nprim
         exponents = rows[:, 0] * scale ** 2
         if label == "sp":
