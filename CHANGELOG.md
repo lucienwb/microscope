@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Hydrogen bonds no longer take minutes on a protein.** Every hydrogen was
+  compared with every acceptor, one pair at a time, on every file open and
+  every restyle: 13.5 s for a 13,000-atom structure with some of its
+  hydrogens, far longer for a fully protonated one. It is 9 ms now, from one
+  neighbour search - the same H-bonds, in the same order, on all 467 corpus
+  structures
+- Bond perception is six times faster (1.32 s to 0.21 s for 98,000 atoms):
+  the grid of cells is searched for every atom at once instead of cell by
+  cell in Python, finding identical bonds. Building the scene takes 0.01 s
+  instead of 0.46, with colours and sizes looked up per element rather than
+  per atom, and the atomic numbers are kept rather than worked out again on
+  every read. A protein renders with `scope -s` in about 1 s instead of 2.3
 - **Orbital energy-level diagram** beside the orbital list (`I`): occupied
   levels with their electrons, virtual ones in grey, degenerate orbitals side
   by side, the HOMO-LUMO gap measured, α and β in two columns when the

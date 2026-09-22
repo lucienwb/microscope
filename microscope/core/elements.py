@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from functools import cache
 
+import numpy as np
+
 # Index = atomic number; index 0 is the dummy atom "X".
 SYMBOLS = [
     "X", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -110,6 +112,15 @@ def symbol_to_z(symbol: str) -> int:
 
 def covalent_radius(z: int) -> float:
     return _COVALENT_RADII.get(int(z), 1.50)
+
+
+# the same, as an array indexed by atomic number, for a whole structure at once
+_RADIUS_BY_Z = np.array([covalent_radius(z) for z in range(len(SYMBOLS))])
+
+
+def covalent_radii(zs) -> np.ndarray:
+    """Covalent radii of many atoms, by atomic number."""
+    return _RADIUS_BY_Z[np.clip(np.asarray(zs, dtype=np.int64), 0, len(_RADIUS_BY_Z) - 1)]
 
 
 def cpk_color(z: int) -> tuple[float, float, float]:

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from . import elements
+from .neighbors import close_pairs
 
 
 @dataclass
@@ -19,6 +20,8 @@ class Molecule:
     title: str = ""
     bonds: np.ndarray | None = None    # (M, 2) int, 0-based atom indices
     charge_known: bool = True          # False when the format never states one
+    # atomic numbers, and the symbols list they were worked out from
+    _numbers: tuple = field(default=(None, None), init=False, repr=False, compare=False)
 
     def __post_init__(self):
         self.coords = np.asarray(self.coords, dtype=np.float64).reshape(-1, 3)
@@ -34,54 +37,33 @@ class Molecule:
 
     @property
     def atomic_numbers(self) -> np.ndarray:
-        # int16: the periodic table stops well short of 32767
-        return np.array([elements.symbol_to_z(s) for s in self.symbols],
-                        dtype=np.int16)
+        """int16 atomic numbers - the periodic table stops well short of 32767.
+        Kept until ``symbols`` is replaced (nothing edits it in place), since
+        rendering and perception read it several times over; on a protein
+        each rebuild was 13 ms."""
+        source, numbers = self._numbers
+        if source is not self.symbols or len(numbers) != len(self.symbols):
+            table = elements._SYMBOL_TO_Z
+            numbers = np.array([table.get(s) or elements.symbol_to_z(s)
+                                for s in self.symbols], dtype=np.int16)
+            numbers.flags.writeable = False           # shared: nobody may edit it
+            self._numbers = (self.symbols, numbers)
+        return numbers
 
     def perceive_bonds(self, tolerance: float = 0.45) -> np.ndarray:
         """Detect bonds: d(i,j) <= r_cov(i) + r_cov(j) + tolerance (Angstrom).
 
         Every pair closer than the longest possible bond is tested, but they
-        are found through a grid of cells one bond wide rather than by
-        comparing all N^2 pairs: a protein has tens of thousands of atoms, and
-        the pairwise difference array alone would be hundreds of gigabytes.
+        are found through a grid of cells one bond wide (core.neighbors) rather
+        than by comparing all N^2 pairs: a protein has tens of thousands of
+        atoms, and the pairwise difference array alone would be hundreds of
+        gigabytes.
         """
-        n = self.natoms
-        if n < 2:
-            self.bonds = np.zeros((0, 2), dtype=np.int32)
-            return self.bonds
-        radii = np.array([elements.covalent_radius(z) for z in self.atomic_numbers])
-        reach = 2.0 * float(radii.max()) + tolerance
-
-        coords = self.coords
-        cells = np.floor((coords - coords.min(axis=0)) / reach).astype(np.int64)
-        buckets: dict[tuple[int, int, int], list[int]] = {}
-        for index, cell in enumerate(map(tuple, cells)):
-            buckets.setdefault(cell, []).append(index)
-
-        offsets = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1)
-                   for dz in (-1, 0, 1)]
-        pairs: list[np.ndarray] = []
-        for (cx, cy, cz), members in buckets.items():
-            near = [a for dx, dy, dz in offsets
-                    for a in buckets.get((cx + dx, cy + dy, cz + dz), ())]
-            here = np.array(members)
-            there = np.array(near)
-            dist = np.linalg.norm(coords[here][:, None, :] - coords[there][None, :, :],
-                                  axis=2)
-            cutoff = radii[here][:, None] + radii[there][None, :] + tolerance
-            # i < j keeps each pair once, whichever cell it is reached from
-            keep = (dist <= cutoff) & (dist > 0.4) & (here[:, None] < there[None, :])
-            rows, cols = np.where(keep)
-            if len(rows):
-                pairs.append(np.column_stack([here[rows], there[cols]]))
-
-        if pairs:
-            bonds = np.vstack(pairs)
-            order = np.lexsort((bonds[:, 1], bonds[:, 0]))
-            self.bonds = bonds[order].astype(np.int32)
-        else:
-            self.bonds = np.zeros((0, 2), dtype=np.int32)
+        radii = elements.covalent_radii(self.atomic_numbers)
+        reach = 2.0 * float(radii.max(initial=0.0)) + tolerance
+        i, j, d = close_pairs(self.coords, reach)
+        keep = (d <= radii[i] + radii[j] + tolerance) & (d > 0.4)
+        self.bonds = np.column_stack([i[keep], j[keep]]).astype(np.int32)
         return self.bonds
 
     def formula(self) -> str:

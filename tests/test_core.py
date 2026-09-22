@@ -157,3 +157,61 @@ def test_dihedral_arm_points():
     # degenerate input
     on_axis = np.array([0.0, 0.0, -1.0])
     assert geometry.dihedral_arm_points(on_axis, b, c, d).shape == (0, 2, 3)
+
+
+def test_close_pairs_finds_exactly_the_brute_force_pairs():
+    from microscope.core.neighbors import close_pairs
+
+    rng = np.random.default_rng(3)
+    points = rng.uniform(-8, 8, size=(600, 3))
+    diff = np.linalg.norm(points[:, None] - points[None, :], axis=2)
+    for cutoff in (0.9, 2.5):
+        want = [(a, b) for a, b in zip(*np.nonzero(np.triu(diff <= cutoff, k=1)))]
+        i, j, d = close_pairs(points, cutoff)
+        assert list(zip(i.tolist(), j.tolist())) == want
+        assert np.allclose(d, diff[i, j])
+    subset = np.arange(0, 600, 3)
+    i, j, _ = close_pairs(points, 2.5, among=subset)
+    assert set(i) <= set(subset) and set(j) <= set(subset)
+    assert len(i) == np.triu(diff[np.ix_(subset, subset)] <= 2.5, k=1).sum()
+
+
+def test_hbonds_match_the_every_pair_answer_in_a_box_of_water():
+    from microscope.core.contacts import find_hbonds
+
+    rng = np.random.default_rng(11)
+    symbols, coords = [], []
+    for centre in rng.uniform(0, 14, size=(160, 3)):
+        turn = geometry.rotation_matrix(rng.normal(size=3), rng.uniform(0, 180))
+        for s, p in (("O", (0, 0, 0)), ("H", (0.96, 0, 0)), ("H", (-0.24, 0.93, 0))):
+            symbols.append(s)
+            coords.append(centre + turn @ np.array(p))
+    water = Molecule(symbols, np.array(coords))
+    water.perceive_bonds()
+    found = find_hbonds(water)
+    # the definition, pair by pair
+    bonded = {tuple(b) for b in water.bonds.tolist()} | {tuple(b[::-1]) for b in water.bonds.tolist()}
+    want = []
+    for h in range(len(symbols)):
+        if symbols[h] != "H":
+            continue
+        donors = sorted(o for o in range(len(symbols)) if (h, o) in bonded and symbols[o] == "O")
+        if not donors:
+            continue
+        for a in range(len(symbols)):
+            if symbols[a] != "O" or a == donors[0] or (h, a) in bonded:
+                continue
+            d = np.linalg.norm(water.coords[a] - water.coords[h])
+            if 1.2 <= d <= 2.6 and geometry.angle(water.coords[donors[0]], water.coords[h],
+                                                  water.coords[a]) >= 120:
+                want.append((h, a))
+    assert [(h, a) for h, a, _ in found] == want and len(want) > 10
+
+
+def test_atomic_numbers_follow_the_symbols_list():
+    mol = Molecule(["C", "O"], np.zeros((2, 3)) + [[0, 0, 0], [1.2, 0, 0]])
+    first = mol.atomic_numbers
+    assert first.tolist() == [6, 8] and mol.atomic_numbers is first     # kept, not rebuilt
+    mol.symbols = ["N", "O"]                   # what undo does: a new list
+    assert mol.atomic_numbers.tolist() == [7, 8]
+    assert not first.flags.writeable           # shared, so nobody may edit it

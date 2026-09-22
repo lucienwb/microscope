@@ -31,8 +31,12 @@ def build_scene(molecule: Molecule, style: Style,
     drawn at the thinnest representation of its two atoms."""
     zs = np.asarray(molecule.atomic_numbers)
     coords = molecule.coords.astype(np.float32)
-    radii = np.array([style.atom_radius(z) for z in zs], dtype=np.float32)
-    colors = np.array([style.atom_color(z) for z in zs], dtype=np.float32)
+    # looked up once per element, not once per atom: a protein is five elements
+    # and a hundred thousand atoms
+    elements, which = np.unique(zs, return_inverse=True)
+    radii = np.array([style.atom_radius(z) for z in elements], dtype=np.float32)[which]
+    colors = np.array([style.atom_color(z) for z in elements],
+                      dtype=np.float32).reshape(-1, 3)[which]
 
     if reps is None or len(reps) != len(zs):
         reps = np.zeros(len(zs), dtype=int)
@@ -93,24 +97,28 @@ def build_surface_meshes(volume: VolumeData, isovalue: float, style: Style) -> l
 
 
 def _hbond_dashes(molecule: Molecule, style: Style) -> np.ndarray:
-    """Short cylinder segments forming dashed H···acceptor lines."""
-    rows = []
-    color = np.asarray(style.hbond_color, dtype=np.float32)
-    for h, acc, _dist in find_hbonds(molecule):
-        p1 = molecule.coords[h].astype(np.float32)
-        p2 = molecule.coords[acc].astype(np.float32)
-        length = float(np.linalg.norm(p2 - p1))
-        if length < 1e-6:
-            continue
-        u = (p2 - p1) / length
-        # keep dashes clear of the atom spheres at both ends
-        s = 0.24
-        end = length - 0.26
-        while s < end:
-            e = min(s + style.hbond_dash, end)
-            rows.append(np.concatenate([
-                p1 + u * s, p1 + u * e, [style.hbond_radius], color, color]))
-            s = e + style.hbond_gap
-    if not rows:
+    """Short cylinder segments forming dashed H···acceptor lines, every dash of
+    every H-bond at once."""
+    found = find_hbonds(molecule)
+    if not found:
         return np.zeros((0, 13), dtype=np.float32)
-    return np.array(rows, dtype=np.float32)
+    pairs = np.array([(h, a) for h, a, _ in found], dtype=np.int64)
+    p1 = molecule.coords[pairs[:, 0]].astype(np.float32)
+    p2 = molecule.coords[pairs[:, 1]].astype(np.float32)
+    length = np.linalg.norm(p2 - p1, axis=1)
+    usable = length >= 1e-6
+    p1, p2, length = p1[usable], p2[usable], length[usable]
+    u = (p2 - p1) / length[:, None]
+    # dashes start 0.24 A out and stop 0.26 A short, clear of the atom spheres
+    period = style.hbond_dash + style.hbond_gap
+    end = length - 0.26
+    count = np.maximum(np.ceil((end - 0.24) / period), 0).astype(np.int64)
+    which = np.repeat(np.arange(len(length)), count)
+    k = np.arange(len(which)) - np.repeat(np.cumsum(count) - count, count)
+    start = 0.24 + k * period
+    stop = np.minimum(start + style.hbond_dash, end[which])
+    ends = np.column_stack([p1[which] + u[which] * start[:, None],
+                            p1[which] + u[which] * stop[:, None]])
+    color = np.asarray(style.hbond_color, dtype=np.float32)
+    return np.hstack([ends, np.full((len(which), 1), style.hbond_radius),
+                      np.tile(color, (len(which), 2))]).astype(np.float32)
