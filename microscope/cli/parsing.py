@@ -192,7 +192,9 @@ def pick_frame(frames: list[Molecule], number: int | None) -> Molecule:
 
 def build_camera(molecule: Molecule, view: str | None, align: str | None,
                  rotate: str | None, zoom: float,
-                 spin: float = 0.0) -> OrthoCamera:
+                 spin: float = 0.0, fit=None) -> OrthoCamera:
+    """The camera the flags describe. *fit*, given the turned camera, frames
+    it before --zoom is applied, so a zoom is relative to that framing."""
     camera = OrthoCamera()
     camera.fit(*molecule.bounding_sphere())
     if align:
@@ -218,11 +220,48 @@ def build_camera(molecule: Molecule, view: str | None, align: str | None,
         _spin(camera, *parse_rotation(rotate))
     if spin:
         camera.spin(spin)
+    if fit is not None:
+        fit(camera)
     if zoom and zoom > 0:
         camera.half_height /= zoom
     elif zoom:
         raise CliError("--zoom must be positive")
     return camera
+
+
+FIGURE_MARGIN = 0.05          # of the frame, clear on each side of the molecule
+
+
+def figure_extent(molecule: Molecule, style, reps=None, volume=None,
+                  isovalue: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """What a figure shows, as spheres (points, radii): every atom at the size
+    it is drawn, and the lobes of an isosurface, which reach well past the
+    atoms."""
+    from ..render.scene import LINE_RADIUS, REP_LINE, REP_STICK
+
+    zs = molecule.atomic_numbers
+    elements, which = np.unique(zs, return_inverse=True)
+    radii = np.array([style.atom_radius(z) for z in elements])[which]
+    if reps is not None and len(reps) == len(radii):
+        reps = np.asarray(reps)
+        radii[reps == REP_STICK] = style.bond_radius
+        radii[reps == REP_LINE] = LINE_RADIUS
+    points, sizes = [molecule.coords], [radii]
+    if volume is not None:
+        level = abs(isovalue) if isovalue else volume.suggest_isovalue()
+        inside = np.argwhere(np.abs(volume.values) >= level)
+        if len(inside):
+            inside = inside[::max(1, len(inside) // 200_000)]    # the extent, not every point
+            points.append(volume.grid_to_world(inside))
+            sizes.append(np.full(len(inside), float(np.abs(volume.axes).max())))
+    return np.vstack(points), np.concatenate(sizes)
+
+
+def frame_figure(camera: OrthoCamera, molecule: Molecule, style, aspect: float,
+                 reps=None, volume=None, isovalue: float | None = None) -> None:
+    """Frame a figure on what it shows from this angle, so it needs no cropping."""
+    points, radii = figure_extent(molecule, style, reps, volume, isovalue)
+    camera.frame(points, radii, aspect, margin=FIGURE_MARGIN)
 
 
 def _spin(camera: OrthoCamera, rx: float, ry: float) -> None:

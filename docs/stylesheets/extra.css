@@ -1,12 +1,21 @@
 /* Animations and screenshots: centred, never wider than the text, with a
    hairline so a white-background render does not dissolve into the page. */
 .md-typeset img[src$=".gif"],
-.md-typeset img[src$=".png"] {
+.md-typeset img[src$=".png"],
+.md-typeset img[src$=".webp"] {
   display: block;
   margin: 1.2em auto;
   max-width: 100%;
   border: 1px solid var(--md-default-fg-color--lightest);
   border-radius: 6px;
+}
+
+/* Renders drawn on a transparent background float on the page instead, and
+   so look the same on the light theme and the dark one. Line art (Lewis
+   structures, spectra, level diagrams) keeps its white page and its frame. */
+.md-typeset img.render {
+  border: none;
+  border-radius: 0;
 }
 
 /* A caption straight after an image. */

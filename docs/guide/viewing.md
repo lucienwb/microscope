@@ -4,7 +4,7 @@
 
 Left-drag turns the molecule, right-drag pans, and the wheel zooms.
 
-![turning a molecule](../assets/orbit.gif)
+![turning a molecule](../assets/orbit.webp){ .render }
 
 To get a particular view rather than a dragged one, select atoms first:
 
@@ -23,7 +23,7 @@ a bond the same length on screen is the same length in the molecule.
 
 ++v++ switches between the two built-in styles.
 
-![switching between the CYLview look and the Houk style](../assets/styles.gif)
+![switching between the CYLview look and the Houk style](../assets/styles.webp){ .render }
 
 **CYLview** is the default: ray-cast spheres and cylinders, so nothing is ever
 faceted however far you zoom, with bonds split half-and-half in the colours of
@@ -41,13 +41,13 @@ either and saves your own.
 ++l++ cycles the atom labels: element, element and number, number, and off.
 Atom numbers are 1-based, matching the numbering the command line uses.
 
-![cycling the atom labels](../assets/labels.gif)
+![cycling the atom labels](../assets/labels.webp){ .render }
 
 ++shift+a++ puts a triad of the world axes in the corner. It turns with the
 molecule, and it is included in exported images, so a figure can say which
 way is which.
 
-![the XYZ axis triad following the rotation](../assets/axes.gif)
+![the XYZ axis triad following the rotation](../assets/axes.webp){ .render }
 
 ## Exporting
 

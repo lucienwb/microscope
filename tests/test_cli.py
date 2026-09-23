@@ -158,6 +158,66 @@ def test_zoom_shrinks_the_view_height():
         cli.build_camera(mol, None, None, None, -1.0)
 
 
+def _chain(n=12):
+    """A long straight molecule: a sphere round it leaves most of a frame empty."""
+    return Molecule(["C"] * n, np.array([[1.5 * k, 0.0, 0.0] for k in range(n)]))
+
+
+def test_a_figure_is_framed_on_what_it_shows():
+    from microscope.render.styles import Style
+
+    mol, style, aspect = _chain(), Style(), 1200 / 900
+    loose = cli.build_camera(mol, None, None, None, 1.0)
+    tight = cli.build_camera(mol, None, None, None, 1.0,
+                             fit=lambda c: cli.frame_figure(c, mol, style, aspect))
+    assert tight.half_height < 0.8 * loose.half_height
+    # everything drawn is inside the frame, and the tighter axis is filled to the margin
+    seen = (mol.coords - tight.center) @ tight.rotation[:2].T
+    reach = np.abs(seen).max(axis=0) + style.atom_radius(6)
+    half_width = tight.half_height * aspect
+    assert reach[0] <= half_width and reach[1] <= tight.half_height
+    assert reach[0] == pytest.approx(half_width * (1 - 2 * cli.FIGURE_MARGIN), rel=1e-6)
+    # --zoom is relative to that framing
+    closer = cli.build_camera(mol, None, None, None, 2.0,
+                              fit=lambda c: cli.frame_figure(c, mol, style, aspect))
+    assert closer.half_height == pytest.approx(tight.half_height / 2)
+
+
+def test_an_isosurface_reaching_past_the_atoms_widens_the_figure():
+    from microscope.core.volume import VolumeData
+    from microscope.render.styles import Style
+
+    mol, style = _chain(4), Style()
+    values = np.zeros((40, 40, 40), dtype=np.float32)
+    values[35:38, 18:22, 18:22] = 0.1                    # a lobe well beyond the atoms
+    grid = VolumeData(origin=np.array([-5.0, -10.0, -10.0]), axes=np.eye(3) * 0.5,
+                      values=values)
+    atoms_only = cli.build_camera(mol, None, None, None, 1.0,
+                                  fit=lambda c: cli.frame_figure(c, mol, style, 1.0))
+    with_lobe = cli.build_camera(mol, None, None, None, 1.0,
+                                 fit=lambda c: cli.frame_figure(c, mol, style, 1.0,
+                                                                volume=grid, isovalue=0.05))
+    assert with_lobe.half_height > atoms_only.half_height
+    lobe = grid.grid_to_world(np.argwhere(values >= 0.05))
+    assert np.abs((lobe - with_lobe.center) @ with_lobe.rotation[:2].T).max() \
+        <= with_lobe.half_height
+
+
+def test_an_orbitals_lobes_are_inside_the_figure():
+    from microscope.render.styles import Style
+
+    result = microscope.load(DATA / "dvb_ir.fchk")
+    mol, volume, style = result.molecule, result.orbitals.volume("lumo"), Style()
+    for view in (None, "0,90", "30,-20"):
+        camera = cli.build_camera(mol, view, None, None, 1.0,
+                                  fit=lambda c: cli.frame_figure(c, mol, style, 4 / 3,
+                                                                 volume=volume))
+        inside = volume.grid_to_world(np.argwhere(np.abs(volume.values) >= 0.02))
+        seen = np.abs((inside - camera.center) @ camera.rotation[:2].T)
+        assert seen[:, 0].max() <= camera.half_height * 4 / 3
+        assert seen[:, 1].max() <= camera.half_height
+
+
 # ------------------------------------------------------------------ style & args
 
 def test_build_style_applies_overrides():

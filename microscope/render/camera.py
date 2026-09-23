@@ -28,6 +28,27 @@ class OrthoCamera:
         self.near = 0.5
         self.far = self.distance + radius * 3.0 + 5.0
 
+    def frame(self, points: np.ndarray, radii, aspect: float, margin: float = 0.05) -> None:
+        """Fit *points* - spheres of *radii* - as they are seen from here.
+
+        :meth:`fit` frames a sphere round the molecule, which holds it however
+        it is turned but leaves half a figure empty; this centres the view on
+        what is actually visible and makes the tighter of height and width
+        just hold it, with *margin* of the frame left clear on each side. The
+        orientation is unchanged.
+        """
+        points = np.atleast_2d(np.asarray(points, dtype=float))
+        if not len(points):
+            return
+        radii = np.broadcast_to(np.asarray(radii, dtype=float), (len(points),))
+        seen = (points - self.center) @ self.rotation[:2].T       # view x, y
+        low = (seen - radii[:, None]).min(axis=0)
+        high = (seen + radii[:, None]).max(axis=0)
+        middle = (low + high) / 2.0
+        self.center = self.center + self.rotation[0] * middle[0] + self.rotation[1] * middle[1]
+        half_x, half_y = (high - low) / 2.0
+        self.half_height = max(half_y, half_x / max(aspect, 1e-6), 0.5) / (1.0 - 2.0 * margin)
+
     def reset_orientation(self) -> None:
         self.rotation = np.eye(3)
 

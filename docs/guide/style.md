@@ -3,7 +3,7 @@
 ++ctrl+t++ (View → Style…) opens the style editor. Every change applies to the
 view as you make it.
 
-![editing atom size, bond width and element colours](../assets/style.gif)
+![editing atom size, bond width and element colours](../assets/style.webp){ .render }
 
 What you can change:
 

@@ -74,7 +74,8 @@ Atom numbers are 1-based, as shown in the viewer.""")
     view.add_argument("--spin", type=float, default=0.0, metavar="DEG",
                       help="turn the picture in the plane of the page")
     view.add_argument("--zoom", type=float, default=1.0, metavar="FACTOR",
-                      help="magnify by this factor (default: 1.0)")
+                      help="magnify by this factor; 1.0 frames the molecule (and any "
+                           "isosurface) tightly, as seen from the chosen view")
 
     image = parser.add_argument_group("image (silent mode)")
     image.add_argument("--size", metavar="WxH",

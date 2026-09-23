@@ -7,7 +7,7 @@ history holds the last hundred edits.
 
 A manipulator sits on whatever is selected.
 
-![sliding and turning a fragment with the manipulator](../assets/handles.gif)
+![sliding and turning a fragment with the manipulator](../assets/handles.webp){ .render }
 
 | Drag | Moves the selection |
 |---|---|

@@ -6,7 +6,7 @@ Open an `.fchk` or `.molden` file (ORCA's `name.molden.input` too) and press
 ++i++. The orbitals are listed with their energies and occupations, the HOMO is
 drawn, and the arrow keys step through the rest.
 
-![stepping from HOMO-2 to LUMO+1 of divinylbenzene](../assets/orbitals.gif)
+![stepping from HOMO-2 to LUMO+1 of divinylbenzene](../assets/orbitals.webp){ .render }
 
 - **Every orbital in the file**, labelled HOMO-2, LUMO+1 and so on, with the
   number the program gives it, its energy in eV and its occupation (and its
@@ -53,7 +53,7 @@ Open a `.cube` file (from Gaussian's `cubegen`, ORCA's `orca_plot`, or anything
 else that writes the format) and the orbital or density appears as an
 isosurface straight away.
 
-![sweeping the isovalue of an orbital](../assets/isosurface.gif)
+![sweeping the isovalue of an orbital](../assets/isosurface.webp){ .render }
 
 ## The controls
 

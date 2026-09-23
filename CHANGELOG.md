@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Figures are framed on the molecule.** `scope -s` used to fit a sphere
+  round the molecule, which holds it at any angle but left half of every
+  figure empty. It now frames what is actually visible from the chosen view
+  - every atom at its drawn size, and the lobes of an orbital - with a thin
+  margin, so a figure needs no cropping; `--zoom` scales from there
+- The documentation's pictures are rendered on a transparent background as
+  animated WebP: they sit on the dark theme as well as the light one instead
+  of as white slabs, in full colour rather than a GIF's 64, each framed to
+  fill its clip and turned with its long axis across. The line-art ones keep
+  their white page. `scripts/record_demo.py` makes all of them, the hero
+  picture included
 - **Hydrogen bonds no longer take minutes on a protein.** Every hydrogen was
   compared with every acceptor, one pair at a time, on every file open and
   every restyle: 13.5 s for a 13,000-atom structure with some of its

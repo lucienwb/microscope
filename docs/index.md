@@ -11,7 +11,7 @@ ORCA and Q-Chem outputs, `xyz`, `pdb`, `fchk`, Molden, cube — and turns them
 into clean 3-D structures, interactive spectra, editable geometries, and
 figures ready for a paper. It installs the short command `scope`.
 
-![tryptophan rendered by microscope, with its intramolecular hydrogen bond](assets/hero.png)
+![tryptophan rendered by microscope, with its intramolecular hydrogen bond](assets/hero.png){ .render }
 
 ## What it does
 

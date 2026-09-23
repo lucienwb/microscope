@@ -11,7 +11,7 @@ The drawing shares its camera with the 3-D view, so **turning it is how you
 choose the angle it is drawn from**. Drag to turn, ++shift++-drag to spin it in
 the plane of the page, scroll to zoom.
 
-![turning a Lewis structure to pick the angle it is drawn from](../assets/lewis_spin.gif)
+![turning a Lewis structure to pick the angle it is drawn from](../assets/lewis_spin.webp)
 
 The mode is deliberately read-only — the Edit menu greys out — because picking
 the angle is all it is for. When two atoms land on top of each other, a note in
@@ -23,7 +23,7 @@ the corner says so, which only ever means: turn it.
 
 Four switches in View → Lewis Structure decide how much is drawn:
 
-![the Lewis drawing options](../assets/lewis_options.gif)
+![the Lewis drawing options](../assets/lewis_options.webp)
 
 - **Colour atoms** — heteroatoms in their element colour
 - **Show lone pairs** — as dots around each atom

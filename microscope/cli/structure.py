@@ -11,6 +11,7 @@ from .parsing import (
     build_style,
     check_output,
     default_output,
+    frame_figure,
     load_volume,
     parse_indices,
     parse_reps,
@@ -44,7 +45,6 @@ def render(args) -> str:
         molecule.perceive_bonds()
 
     style = build_style(args)
-    camera = build_camera(molecule, args.view, args.align, args.rotate, args.zoom)
     volume = load_volume(args, result)
     reps = parse_reps(args.rep, molecule.natoms) if args.rep else None
     measured = [parse_indices(spec, molecule.natoms) for spec in args.measure or []]
@@ -53,6 +53,11 @@ def render(args) -> str:
             raise CliError("--measure wants 2 atoms (distance), 3 (angle) "
                            "or 4 (dihedral)")
     width, height = resolve_size(args)
+    # framed on what the figure shows from the chosen angle; --zoom then scales that
+    camera = build_camera(
+        molecule, args.view, args.align, args.rotate, args.zoom,
+        fit=lambda cam: frame_figure(cam, molecule, style, width / height, reps,
+                                     volume, args.iso))
 
     try:
         image = render_molecule_image(

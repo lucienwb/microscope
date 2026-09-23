@@ -17,7 +17,7 @@ live, in the status bar and in the scene. It is drawn the way a paper draws it:
 - a **dihedral** with a rotation arrow around the central bond — seen straight
   down that bond, it reads as a Newman projection
 
-![measuring a distance, an angle and a dihedral](../assets/measure.gif)
+![measuring a distance, an angle and a dihedral](../assets/measure.webp){ .render }
 
 The status bar names the atoms the way the viewer labels them — `d(C1–C2) =
 1.421 Å`, `∠(C1–C2–C3) = 120.9°` — so a value can be copied straight into a

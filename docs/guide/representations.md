@@ -4,7 +4,7 @@ Select a region and give it its own level of detail. The part that matters can
 stay in full ball-and-stick while its surroundings drop to sticks, and
 everything else to thin lines.
 
-![giving a region its own level of detail](../assets/regions.gif)
+![giving a region its own level of detail](../assets/regions.webp){ .render }
 
 | Keys | Representation |
 |---|---|
