@@ -77,12 +77,17 @@ class MoleculeRenderer:
         self._meshes: list[tuple[int, int, int, tuple]] = []  # vao, vbo, nverts, rgba
         self._quad_color = (0.0, 0.0, 0.0)
         self._quad_width = 0.0
+        self._depth_cue = 0.0
+        self._atoms = np.zeros((0, 4), dtype=np.float32)   # centre + radius, for depth cueing
+        self._mesh_corners = np.zeros((0, 3), dtype=np.float32)
 
     def set_style_params(self, quad_color: tuple | None = None,
-                         quad_width: float = 0.0) -> None:
-        """Houkmol seam-line ("quadrant") parameters from the Style."""
+                         quad_width: float = 0.0, depth_cue: float = 0.0) -> None:
+        """Houkmol seam-line ("quadrant") parameters, and how strongly depth
+        cueing fades the far side of the molecule (0 = not at all)."""
         self._quad_color = tuple(quad_color) if quad_color else (0.0, 0.0, 0.0)
         self._quad_width = float(quad_width) if quad_color else 0.0
+        self._depth_cue = float(np.clip(depth_cue, 0.0, 1.0))
 
     def initialize(self) -> None:
         self._sphere_prog = _link_program(SPHERE_VERT, SPHERE_FRAG)
@@ -124,6 +129,7 @@ class MoleculeRenderer:
         return vao
 
     def set_scene(self, scene: SceneBuffers) -> None:
+        self._atoms = scene.spheres[:, :4]
         self._nspheres = len(scene.spheres)
         self._ncylinders = len(scene.cylinders)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._sphere_vbo)
@@ -160,6 +166,13 @@ class MoleculeRenderer:
             GL.glBindVertexArray(0)
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             self._meshes.append((vao, vbo, len(verts), tuple(rgba)))
+        # the corners of the surfaces' box: enough to know how deep they reach
+        boxes = [np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1])
+                           for z in (lo[2], hi[2])])
+                 for verts, _n, _c in meshes if len(verts)
+                 for lo, hi in [(verts.min(axis=0), verts.max(axis=0))]]
+        self._mesh_corners = (np.vstack(boxes) if boxes
+                              else np.zeros((0, 3), dtype=np.float32))
 
     def draw(self, view: np.ndarray, proj: np.ndarray, width: int, height: int,
              background=(1.0, 1.0, 1.0, 1.0), pick: bool = False,
@@ -185,6 +198,14 @@ class MoleculeRenderer:
         # lines rotate with the molecule
         quad_a = np.ascontiguousarray(vm[:3, 0])
         quad_b = np.ascontiguousarray(vm[:3, 1])
+        fog_range = self._depth_range(view)
+        fog_color = np.asarray(background[:3], dtype=np.float32)
+        fog = 0.0 if pick else self._depth_cue
+
+        def set_fog(prog):
+            GL.glUniform3fv(GL.glGetUniformLocation(prog, "uFogColor"), 1, fog_color)
+            GL.glUniform1f(GL.glGetUniformLocation(prog, "uFogStrength"), fog)
+            GL.glUniform2f(GL.glGetUniformLocation(prog, "uFogRange"), *fog_range)
 
         batches = ((self._sphere_prog, self._sphere_vao, self._nspheres),
                    (self._cyl_prog, self._cyl_vao, self._ncylinders))
@@ -196,6 +217,7 @@ class MoleculeRenderer:
             GL.glUniformMatrix4fv(GL.glGetUniformLocation(prog, "uProj"), 1, GL.GL_TRUE, pm)
             GL.glUniform3fv(GL.glGetUniformLocation(prog, "uLightDir"), 1, light)
             GL.glUniform1i(GL.glGetUniformLocation(prog, "uPick"), 1 if pick else 0)
+            set_fog(prog)
             loc = GL.glGetUniformLocation(prog, "uQuadColor")
             if loc != -1:
                 GL.glUniform3f(loc, *self._quad_color)
@@ -214,6 +236,7 @@ class MoleculeRenderer:
                                   1, GL.GL_TRUE, pm)
             GL.glUniform3fv(GL.glGetUniformLocation(self._mesh_prog, "uLightDir"),
                             1, light)
+            set_fog(self._mesh_prog)
             color_loc = GL.glGetUniformLocation(self._mesh_prog, "uColor")
             # translucent surfaces, two passes: prime the depth buffer with the
             # nearest surface layer, then blend exactly that layer once —
@@ -240,6 +263,20 @@ class MoleculeRenderer:
         GL.glUseProgram(0)
         if use_ss:
             GL.glDisable(GL.GL_SAMPLE_SHADING)
+
+    def _depth_range(self, view: np.ndarray) -> tuple[float, float]:
+        """View-space z of the nearest and farthest point of the scene: depth
+        cueing runs from the front of the molecule to its back, not from the
+        camera, so it looks the same however far the camera stands off."""
+        row = np.asarray(view, dtype=float)[2]
+        near, far = -np.inf, np.inf
+        if len(self._atoms):
+            z = self._atoms[:, :3] @ row[:3] + row[3]
+            near, far = float((z + self._atoms[:, 3]).max()), float((z - self._atoms[:, 3]).min())
+        if len(self._mesh_corners):
+            z = self._mesh_corners @ row[:3] + row[3]
+            near, far = max(near, float(z.max())), min(far, float(z.min()))
+        return (near, far) if np.isfinite(near) else (0.0, -1.0)
 
     def pick_atom(self, x: float, y: float, view, proj, width: int, height: int) -> int:
         """Pick at GL pixel coords (origin bottom-left). Returns atom index or -1."""

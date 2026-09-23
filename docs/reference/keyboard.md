@@ -12,6 +12,7 @@ On macOS, read ++ctrl++ as ++cmd++.
 | ++1++ ++2++ ++3++ | ball & stick · stick · line, for the selection or the whole molecule |
 | ++l++ | cycle atom labels: element → element + number → number → off |
 | ++shift+a++ | the corner XYZ axis triad |
+| ++d++ | depth cueing: fade the far side toward the background |
 | ++a++ | align the view: down the bond (2 atoms) or into the plane (3 atoms) |
 | ++c++ | rotate about the selected atom |
 | ++home++ | re-centre on the molecule |

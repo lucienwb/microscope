@@ -106,6 +106,14 @@ def build_menus(window):
     window._axes_action.toggled.connect(window._toggle_axes)
     view_menu.addAction(window._axes_action)
 
+    window._depth_action = QAction("&Depth Cueing", window, checkable=True)
+    window._depth_action.setShortcut(QKeySequence("D"))
+    window._depth_action.setToolTip(
+        "Fade the far side of the molecule toward the background; how strongly "
+        "is set in View → Style… (also exported)")
+    window._depth_action.toggled.connect(window._toggle_depth_cue)
+    view_menu.addAction(window._depth_action)
+
     add_action(window, view_menu, "&Orbitals && Isosurface…", "I", window._show_surface_dialog)
 
     lewis_menu = view_menu.addMenu("&Lewis Structure")

@@ -366,3 +366,15 @@ def test_a_value_gaussian_could_not_print_is_missing_not_fatal(tmp_path):
     mode = result.vibrations[0]
     assert mode.frequency == pytest.approx(4400.0)
     assert mode.ir_intensity is None and mode.raman_activity is None
+
+
+def test_a_small_protein_reads_whole():
+    """Crambin, the protein the documentation's examples open: every atom of
+    the one model, and every covalent bond - the six cysteines paired into
+    three disulfides."""
+    mol = mio.load(DATA / "1crn.pdb").molecule
+    assert mol.natoms == 327 and mol.formula() == "C202N55O64S6"
+    bonds = mol.perceive_bonds()
+    sulfur = {i for i, s in enumerate(mol.symbols) if s == "S"}
+    disulfides = [b for b in bonds.tolist() if set(b) <= sulfur]
+    assert len(disulfides) == 3

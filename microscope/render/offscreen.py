@@ -46,7 +46,8 @@ def render_molecule_image(molecule: Molecule, style: Style, camera: OrthoCamera,
     try:
         renderer = MoleculeRenderer()
         renderer.initialize()
-        renderer.set_style_params(style.quadrant_color, style.quadrant_width)
+        renderer.set_style_params(style.quadrant_color, style.quadrant_width,
+                                  style.depth_cue)
         if molecule.bonds is None:
             molecule.perceive_bonds()
         renderer.set_scene(build_scene(molecule, style, reps))

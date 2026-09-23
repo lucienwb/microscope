@@ -79,12 +79,19 @@ Each links to the page that shows it working.
 Supported [file formats](https://lucienwb.github.io/microscope/reference/formats/) · [How it works](https://lucienwb.github.io/microscope/about/how-it-works/) ·
 [Development](https://lucienwb.github.io/microscope/about/development/) · [Changelog](https://lucienwb.github.io/microscope/about/changelog/)
 
+## Citing
+
+If microscope made a figure in your paper, a citation is appreciated: GitHub's
+**Cite this repository** button (from [`CITATION.cff`](CITATION.cff)) gives it
+in APA and BibTeX.
+
 ## Acknowledgments
 
 - The rendering style is inspired by **CYLview** (C. Y. Legault, Université
   de Sherbrooke) — this project is an independent implementation.
 - Parser test fixtures in `tests/data/` come from the **cclib** project's
-  test suite (BSD-3-Clause); see `tests/data/README.md`.
+  test suite (BSD-3-Clause), and crambin (1CRN) from the **RCSB Protein Data
+  Bank**; see `tests/data/README.md`.
 - Much of the code was written with **[Claude Code](https://claude.com/claude-code)**
   (Anthropic). The chemistry, the design decisions and the review are the
   maintainer's.

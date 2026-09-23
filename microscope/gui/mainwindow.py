@@ -65,6 +65,7 @@ class MainWindow(QMainWindow):
         self.current_frame = 0
         self._surface_dialog: SurfaceDialog | None = None
         self._orbital_grids: dict[tuple[str, int], object] = {}   # last few, newest last
+        self._depth_strength = self.DEPTH_CUE
         self._loader: Loader | None = None                        # the file being read
         self._style_dialog: StyleDialog | None = None
 
@@ -83,6 +84,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._file_label)
         self.viewport.selectionChanged.connect(self.statusBar().showMessage)
         self.viewport.structureEdited.connect(self._mark_edited)
+        self.viewport.styleChanged.connect(self._sync_depth_action)
 
         self.spectra_dock = SpectraDock(self.viewport, self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.spectra_dock)
@@ -451,6 +453,23 @@ class MainWindow(QMainWindow):
             "Lewis structure — drag to turn it, Shift+drag to spin it in the "
             "page, scroll to zoom. Read-only: pick the angle, then export or "
             "save for ChemDraw." if on else "Back to the 3D view", 8000)
+
+    DEPTH_CUE = 0.5          # the strength D switches on, until the style editor sets another
+
+    def _toggle_depth_cue(self, on: bool):
+        self.viewport.set_depth_cue(self._depth_strength if on else 0.0)
+        self.statusBar().showMessage(
+            f"Depth cueing {'on' if on else 'off'}"
+            + (" — set its strength in View → Style…" if on else ""), 3000)
+
+    def _sync_depth_action(self):
+        """Keep the menu tick true to the style, however the style changed."""
+        strength = self.viewport.style.depth_cue
+        if strength > 0:
+            self._depth_strength = strength          # what D brings back next time
+        self._depth_action.blockSignals(True)
+        self._depth_action.setChecked(strength > 0)
+        self._depth_action.blockSignals(False)
 
     def _toggle_axes(self, on: bool):
         self.viewport.set_show_axes(on)

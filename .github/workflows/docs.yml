@@ -9,6 +9,7 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "overrides/**"           # the link-preview tags
       - "microscope/**"          # the CLI, style and API references are generated from it
       - "scripts/mkdocs_hooks.py"
       - "CHANGELOG.md"

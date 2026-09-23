@@ -28,6 +28,7 @@ LABEL_MODES = ("none", "element", "element+number", "number")
 class MoleculeViewport(QOpenGLWidget):
     selectionChanged = Signal(str)
     structureEdited = Signal()
+    styleChanged = Signal()         # anything about the style: menus and editors follow
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -228,6 +229,14 @@ class MoleculeViewport(QOpenGLWidget):
             self._rebuild_scene()
         self._update_surface()
         self.update()
+        self.styleChanged.emit()
+
+    def set_depth_cue(self, strength: float) -> None:
+        """Fade the far side of the molecule toward the background; 0 is off.
+        Only a shader setting, so nothing is rebuilt."""
+        self.style.depth_cue = float(min(max(strength, 0.0), 1.0))
+        self.update()
+        self.styleChanged.emit()
 
     def apply_style(self, style: Style) -> None:
         """Adopt a whole style, keeping the isosurface the user set up."""
@@ -246,10 +255,12 @@ class MoleculeViewport(QOpenGLWidget):
         new.surface_positive = self.style.surface_positive
         new.surface_negative = self.style.surface_negative
         new.surface_opacity = self.style.surface_opacity
+        new.depth_cue = self.style.depth_cue
         self.style = new
         if self.molecule is not None:
             self._rebuild_scene()
         self.update()
+        self.styleChanged.emit()
 
     # ------------------------------------------------------------------ editing
 
@@ -486,7 +497,8 @@ class MoleculeViewport(QOpenGLWidget):
         view = self.camera.view_matrix()
         proj = self.camera.proj_matrix(w / h)
         self._renderer.set_style_params(self.style.quadrant_color,
-                                        self.style.quadrant_width)
+                                        self.style.quadrant_width,
+                                        self.style.depth_cue)
         self._renderer.draw(view, proj, w, h, background=(*self.style.background, 1.0))
         overlay_needed = bool(self.selection or self.pinned or self.show_axes
                               or self.label_mode != "none")

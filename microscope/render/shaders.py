@@ -18,6 +18,18 @@ vec3 shade(vec3 n, vec3 base) {
     col *= 0.86 + 0.14 * n.z;   // soft silhouette falloff
     return col;
 }
+
+// Depth cueing: the farther a point lies behind the front of the molecule,
+// the more it fades toward the background - off at strength 0.
+uniform vec3 uFogColor;
+uniform float uFogStrength;
+uniform vec2 uFogRange;    // view-space z of the scene's nearest and farthest point
+
+vec3 cue(vec3 col, float zView) {
+    if (uFogStrength <= 0.0) return col;
+    float depth = (uFogRange.x - zView) / max(uFogRange.x - uFogRange.y, 1e-6);
+    return mix(col, uFogColor, uFogStrength * clamp(depth, 0.0, 1.0));
+}
 """
 
 SPHERE_VERT = """#version 330 core
@@ -83,7 +95,7 @@ void main() {
     if (vQuad > 0.5 && uQuadWidth > 0.0 &&
         (abs(dot(n, uQuadA)) < uQuadWidth || abs(dot(n, uQuadB)) < uQuadWidth))
         base = uQuadColor;
-    fragColor = vec4(shade(n, base), 1.0);
+    fragColor = vec4(cue(shade(n, base), zView), 1.0);
 }
 """
 
@@ -162,7 +174,7 @@ void main() {
         return;
     }
     vec3 base = (t < 0.5 * L) ? vColorA : vColorB;
-    fragColor = vec4(shade(n, base), 1.0);
+    fragColor = vec4(cue(shade(n, base), H.z), 1.0);
 }
 """
 
@@ -172,21 +184,25 @@ layout(location = 1) in vec3 normal;
 uniform mat4 uView;
 uniform mat4 uProj;
 out vec3 vNormal;
+out float vZ;
 
 void main() {
     vNormal = mat3(uView) * normal;
-    gl_Position = uProj * (uView * vec4(position, 1.0));
+    vec4 seen = uView * vec4(position, 1.0);
+    vZ = seen.z;
+    gl_Position = uProj * seen;
 }
 """
 
 MESH_FRAG = """#version 330 core
 in vec3 vNormal;
+in float vZ;
 uniform vec4 uColor;    // rgb + opacity
 out vec4 fragColor;
 """ + _LIGHTING + """
 void main() {
     vec3 n = normalize(vNormal);
     if (n.z < 0.0) n = -n;   // two-sided: light whichever face shows
-    fragColor = vec4(shade(n, uColor.rgb), uColor.a);
+    fragColor = vec4(cue(shade(n, uColor.rgb), vZ), uColor.a);
 }
 """

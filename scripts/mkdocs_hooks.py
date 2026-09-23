@@ -78,6 +78,8 @@ def style_reference() -> str:
         "bond_color": "one colour for every bond; `null` splits each by its atoms",
         "quadrant_color": "seam lines on heavy atoms (the Houk style); `null` for none",
         "quadrant_width": "seam line width, as a fraction of the atom radius",
+        "depth_cue": "how far the back of the molecule fades toward the background, "
+                     "0–1; `0` is off",
     }
     for f in fields(Style):
         value = getattr(default, f.name)

@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: >-
+  If microscope made a figure or an analysis in your work, please cite it
+  as below.
+type: software
+title: "microscope: a molecular structure and spectroscopy viewer for quantum chemistry"
+abstract: >-
+  microscope reads the files quantum-chemistry programs write (Gaussian, ORCA
+  and Q-Chem outputs, xyz, pdb, fchk, Molden and cube files) and turns them
+  into 3-D structures, interactive spectra, orbitals, ChemDraw-style Lewis
+  structures, and publication figures, from a viewer or from the command line.
+authors:
+  - family-names: Wang
+    given-names: Bin
+version: 0.1.0
+date-released: "2026-08-12"
+license: MIT
+repository-code: "https://github.com/lucienwb/microscope"
+url: "https://lucienwb.github.io/microscope/"
+keywords:
+  - chemistry
+  - quantum chemistry
+  - molecular visualization
+  - spectroscopy

@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from PySide6.QtCore import QBuffer
-from PySide6.QtGui import QGuiApplication, QPainter
+from PySide6.QtGui import QColor, QGuiApplication, QPainter
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
@@ -61,7 +61,8 @@ def _to_pil(qimage, alpha: bool = True) -> Image.Image:
 
 
 def _shot(molecule, camera, *, style="cylview", reps=None, volume=None,
-          iso=None, overlay=None, caption=None, size=(W, H)) -> Image.Image:
+          iso=None, overlay=None, caption=None, size=(W, H),
+          opaque: bool = False) -> Image.Image:
     """One frame: the molecule as rendered, plus whatever the viewer draws on top."""
     style = make_style(style) if isinstance(style, str) else style
     if _PLAN is not None:            # first pass: note it, draw nothing
@@ -72,7 +73,7 @@ def _shot(molecule, camera, *, style="cylview", reps=None, volume=None,
         camera.center, camera.half_height = _FIT[0].copy(), _FIT[1]
     width, height = size
     image = render_molecule_image(molecule, style, camera, width, height,
-                                  supersample=2, transparent=True,
+                                  supersample=2, transparent=not opaque,
                                   volume=volume, isovalue=iso, reps=reps)
     if overlay or caption:
         painter = QPainter(image)
@@ -85,7 +86,7 @@ def _shot(molecule, camera, *, style="cylview", reps=None, volume=None,
             painter.setFont(font)
             annotations.draw_halo_text(painter, 16, height - 16, caption)
         painter.end()
-    return _to_pil(image)
+    return _to_pil(image, alpha=not opaque)
 
 
 def _fitting(plan: list, aspect: float, margin: float) -> tuple[np.ndarray, float]:
@@ -337,6 +338,103 @@ def levels():
     print(f"  {path.relative_to(REPO)}  {path.stat().st_size / 1024:.0f} KB")
 
 
+def depth():
+    """D: depth cueing, off and then on, on a small protein in sticks."""
+    _, mol = _load("1crn.pdb")
+    cam = _camera(mol)
+    _landscape(cam, mol.coords)
+    sticks = np.full(mol.natoms, REP_STICK, dtype=int)
+    frames = []
+    for strength in (0.0, 0.7):
+        style = make_style("cylview")
+        style.depth_cue = strength
+        # on white: depth cueing fades toward the background, so it has one
+        label = "depth cueing off" if not strength else f"depth cueing {strength:g}"
+        frames.append(_shot(mol, cam, style=style, reps=sticks, caption=label, opaque=True))
+        _hold(frames, 12)
+    _save(frames, "depth_cue.webp", ms=110)
+
+
+def _icon(size: int) -> Image.Image:
+    """A benzene ring, light and heavy on transparent: it sits on the indigo
+    header, and a bare ring still reads as benzene at 16 pixels, where
+    hydrogens would turn it into a snowflake."""
+    from microscope.core.molecule import Molecule
+
+    turns = np.radians(np.arange(6) * 60.0 + 30.0)
+    mol = Molecule(["C"] * 6, 1.39 * np.column_stack([np.cos(turns), np.sin(turns),
+                                                       np.zeros(6)]))
+    mol.perceive_bonds()
+    style = make_style("cylview")
+    style.palette = {**style.palette, 6: (0.97, 0.97, 1.0)}
+    style.bond_color = (0.90, 0.91, 1.0)
+    style.bond_radius *= 1.9
+    style.atom_scale *= 1.9
+    cam = _camera(mol)
+    cam.rotate_drag(0, 45)                     # tipped back, so it reads as 3-D
+    cam.frame(mol.coords, style.atom_radius(6), 1.0, margin=0.04)
+    image = render_molecule_image(mol, style, cam, size, size, supersample=3,
+                                  transparent=True)
+    return _to_pil(image)
+
+
+def logo():
+    """The header logo, and the favicon: benzene, drawn by microscope."""
+    ring = _icon(256)
+    ring.save(OUT / "logo.png")
+    # the favicon needs its own ground: a light icon vanishes on a light tab bar
+    from PIL import ImageDraw
+
+    disc = Image.new("RGBA", (256, 256))
+    ImageDraw.Draw(disc).ellipse((4, 4, 252, 252), fill=(63, 81, 181, 255))
+    disc.alpha_composite(ring.resize((176, 176), Image.LANCZOS), (40, 40))
+    disc.resize((64, 64), Image.LANCZOS).save(OUT / "favicon.png")
+    for name in ("logo.png", "favicon.png"):
+        print(f"  {(OUT / name).relative_to(REPO)}  {(OUT / name).stat().st_size / 1024:.0f} KB")
+
+
+def social():
+    """The card a shared link shows: name, what it is, and a molecule."""
+    from PySide6.QtCore import QRectF, Qt
+    from PySide6.QtGui import QFont, QImage
+
+    card = QImage(1200, 630, QImage.Format.Format_ARGB32_Premultiplied)
+    card.fill(QColor(255, 255, 255))
+    _, mol = _load("trp.log")
+    cam = _camera(mol)
+    _face_on(cam, mol.coords)
+    cam.rotate_drag(25, 35)
+    cam.frame(mol.coords, 0.5, 620 / 560, margin=0.03)
+    render = render_molecule_image(mol, make_style("cylview"), cam, 620, 560,
+                                   supersample=2, transparent=True)
+    painter = QPainter(card)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.drawImage(560, 35, render)
+    painter.fillRect(0, 0, 1200, 12, QColor(63, 81, 181))
+    title = QFont()
+    title.setPixelSize(92)
+    title.setWeight(QFont.Weight.Light)
+    painter.setFont(title)
+    painter.setPen(QColor(40, 40, 48))
+    painter.drawText(QRectF(70, 150, 520, 120), Qt.AlignmentFlag.AlignLeft, "microscope")
+    body = QFont()
+    body.setPixelSize(34)
+    painter.setFont(body)
+    painter.setPen(QColor(70, 70, 80))
+    painter.drawText(QRectF(72, 285, 500, 200), Qt.TextFlag.TextWordWrap,
+                     "Quantum-chemistry output files, turned into figures")
+    small = QFont()
+    small.setPixelSize(24)
+    painter.setFont(small)
+    painter.setPen(QColor(63, 81, 181))
+    painter.drawText(QRectF(72, 520, 520, 40), Qt.AlignmentFlag.AlignLeft,
+                     "lucienwb.github.io/microscope")
+    painter.end()
+    path = OUT / "social.png"
+    card.save(str(path))
+    print(f"  {path.relative_to(REPO)}  {path.stat().st_size / 1024:.0f} KB")
+
+
 def vibrate():
     """Click an IR band: the molecule walks through that normal mode."""
     result, mol = _load("dvb_ir.out")
@@ -432,14 +530,15 @@ def style():
     _save(frames, "style.webp", ms=90)
 
 
-CLIPS = {f.__name__: f for f in (hero, orbit, styles, style, regions, labels, measure,
-                                 handles, axes, orbitals, levels, isosurface, vibrate,
-                                 trajectory, lewis, lewis_options)}
+CLIPS = {f.__name__: f for f in (hero, logo, social, orbit, styles, style, regions,
+                                 labels, measure, handles, axes, depth, orbitals, levels,
+                                 isosurface, vibrate, trajectory, lewis, lewis_options)}
 # the 3-D clips and how much room each leaves round the molecule: the ones with
 # the viewer's labels, measurements or handles on top need more of it
 FRAMED = {"hero": MARGIN, "orbit": MARGIN, "styles": MARGIN, "style": MARGIN,
           "regions": MARGIN, "labels": 0.09, "measure": 0.10, "handles": 0.16,
-          "axes": 0.10, "orbitals": 0.07, "isosurface": MARGIN, "vibrate": MARGIN,
+          "axes": 0.10, "depth": 0.08, "orbitals": 0.07, "isosurface": MARGIN,
+          "vibrate": MARGIN,
           "trajectory": MARGIN}
 
 

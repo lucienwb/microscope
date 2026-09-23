@@ -486,6 +486,12 @@ class StyleDialog(QDialog):
         self.hbonds.toggled.connect(lambda on: self._set(show_hbonds=bool(on)))
         layout.addRow("", self.hbonds)
 
+        self.depth_cue = self._slider(layout, "Depth cueing:", 0, 100,
+                                      viewport.style.depth_cue * 100,
+                                      lambda v: self._set_depth_cue(v / 100.0))
+        self.depth_cue.setToolTip("How far the back of the molecule fades toward "
+                                  "the background; 0 is off (D toggles it)")
+
         self.elements = QWidget()
         self.element_row = QHBoxLayout(self.elements)
         self.element_row.setContentsMargins(0, 0, 0, 0)
@@ -501,6 +507,8 @@ class StyleDialog(QDialog):
                           ).clicked.connect(self.close)
         layout.addRow(buttons)
         self._refresh()
+        # the D key and the V preset change the style too: follow them
+        viewport.styleChanged.connect(self._sync_controls)
 
     # ------------------------------------------------------------------ parts
 
@@ -533,6 +541,9 @@ class StyleDialog(QDialog):
             setattr(self.viewport.style, key, value)
         self.viewport.refresh_style()
         self._refresh()
+
+    def _set_depth_cue(self, strength: float) -> None:
+        self.viewport.set_depth_cue(strength)       # a shader setting: no rebuild
 
     def _preset_chosen(self, _index: int) -> None:
         name = self.preset.currentText()
@@ -601,7 +612,8 @@ class StyleDialog(QDialog):
     def _sync_controls(self) -> None:
         style = self.viewport.style
         for slider, value in ((self.atom_scale, style.atom_scale * 100),
-                              (self.bond_radius, style.bond_radius * 100)):
+                              (self.bond_radius, style.bond_radius * 100),
+                              (self.depth_cue, style.depth_cue * 100)):
             slider.blockSignals(True)
             slider.setValue(int(round(value)))
             slider.blockSignals(False)

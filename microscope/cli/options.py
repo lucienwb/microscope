@@ -61,6 +61,9 @@ Atom numbers are 1-based, as shown in the viewer.""")
                       help="hide the dashed hydrogen bonds")
     look.add_argument("--axes", action="store_true",
                       help="draw the XYZ orientation triad")
+    look.add_argument("--depth-cue", type=float, metavar="STRENGTH",
+                      help="fade the far side of the molecule toward the background, "
+                           "0-1 (try 0.5; default: the style's, off)")
 
     view = parser.add_argument_group("view")
     view.add_argument("--view", metavar="SPEC",
@@ -158,12 +161,12 @@ Atom numbers are 1-based, as shown in the viewer.""")
 _LEWIS_ONLY = LEWIS_OPTION_FLAGS
 _STRUCTURE_ONLY = ("supersample", "measure", "rotate", "view", "align", "frame",
                    "cube", "mo", "iso", "iso_colors", "iso_opacity", "rep",
-                   "background", "bond_color", "no_hbonds", "zoom", "spin",
+                   "background", "bond_color", "no_hbonds", "depth_cue", "zoom", "spin",
                    "style", "labels", "axes", "lewis") + _LEWIS_ONLY
 _SPECTRUM_ONLY = ("ir", "uv", "nmr", "fwhm", "freq_scale", "unit", "nucleus",
                   "reference", "xrange", "no_sticks", "dpi", "title", "csv")
 # a Lewis drawing is line art: none of the 3D renderer's knobs reach it
-_LEWIS_INCOMPATIBLE = ("style", "rep", "bond_color", "no_hbonds", "labels",
+_LEWIS_INCOMPATIBLE = ("style", "rep", "bond_color", "no_hbonds", "depth_cue", "labels",
                        "axes", "measure", "supersample", "cube", "mo", "iso",
                        "iso_colors", "iso_opacity")
 # these configure the viewer too, so they are allowed without -s

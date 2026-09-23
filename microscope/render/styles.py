@@ -47,6 +47,7 @@ class Style:
     bond_color: tuple | None = None      # uniform bonds (None = split by atom)
     quadrant_color: tuple | None = None  # seam lines on heavy atoms (Houkmol)
     quadrant_width: float = 0.055        # seam line width (fraction of radius)
+    depth_cue: float = 0.0               # fade the far side to the background, 0-1 (0 = off)
 
     def atom_radius(self, z: int) -> float:
         return max(elements.covalent_radius(z) * self.atom_scale, self.min_atom_radius)

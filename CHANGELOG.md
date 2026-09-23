@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Depth cueing**, off unless asked for: `D` in the viewer, a strength
+  slider in the style editor, `--depth-cue 0.5` on the command line and
+  `"depth_cue"` in a style file. The far side of the molecule fades toward
+  the background, measured from the front of what is drawn to its back, so
+  it is as strong on a water molecule as on a protein; isosurfaces fade with
+  the atoms, and exported images keep it
+- The documentation gained a "try it now" list that runs on the repository's
+  own test files, a troubleshooting page (OpenGL on Linux, clusters, remote
+  sessions; unrecognized files and orbital conventions), a citing page backed
+  by `CITATION.cff`, a logo and favicon, and a preview card for shared links
+- Crambin (PDB 1CRN) joins the test files: a whole protein in 327 atoms
 - **Figures are framed on the molecule.** `scope -s` used to fit a sphere
   round the molecule, which holds it at any angle but left half of every
   figure empty. It now frames what is actually visible from the chosen view

@@ -49,6 +49,26 @@ way is which.
 
 ![the XYZ axis triad following the rotation](../assets/axes.webp){ .render }
 
+## Depth cueing
+
+In a big structure, the atoms at the back get in the way of the ones at the
+front. ++d++ fades the far side of the molecule toward the background, so
+what is near you stands out.
+
+![a small protein in sticks, with depth cueing off and then on](../assets/depth_cue.webp)
+
+It is off until you ask for it, because plenty of people prefer every atom
+at full strength, and a figure for print is often clearer that way. How
+strongly it fades is the **Depth cueing** slider in the
+[style editor](style.md): the front of the molecule always keeps its own
+colour, and the slider sets how far toward the background the back goes.
+The fade is toward the style's background colour even in a transparent
+export, so for a figure going on a dark slide, set the background to match
+the slide. The same effect is `--depth-cue 0.5` on the
+[command line](../reference/command-line.md), and `"depth_cue"` in a
+[style file](../reference/style-files.md), so a group style can switch it on
+for everyone.
+
 ## Exporting
 
 ++ctrl+e++ exports the view as a high-resolution image, with the isosurface,

@@ -88,3 +88,57 @@ def test_a_bad_style_on_the_command_line_is_a_clean_error():
     args = cli.build_parser().parse_args(["-s", "mol.log", "--style", "nope"])
     with pytest.raises(cli.CliError, match="no style preset or file"):
         cli.build_style(args)
+
+
+# ------------------------------------------------------------ depth cueing
+
+def test_depth_cueing_is_off_until_asked_for(tmp_path):
+    """Some people like the far side faded and some do not: it is a style
+    setting, off in both presets, kept in a style file like the rest."""
+    assert styles.Style().depth_cue == 0.0 and styles.houk_style().depth_cue == 0.0
+    style = styles.Style(depth_cue=0.6)
+    styles.save_style(tmp_path / "cued.json", style)
+    assert styles.load_style(tmp_path / "cued.json").depth_cue == 0.6
+
+
+def test_the_command_line_sets_depth_cueing():
+    args = cli.build_parser().parse_args(["-s", "x.log", "--depth-cue", "0.5"])
+    assert cli.build_style(args).depth_cue == 0.5
+    assert cli.build_style(cli.build_parser().parse_args(["-s", "x.log"])).depth_cue == 0.0
+    with pytest.raises(cli.CliError):
+        cli.build_style(cli.build_parser().parse_args(["-s", "x.log", "--depth-cue", "2"]))
+    parser = cli.build_parser()
+    with pytest.raises(SystemExit):                    # a Lewis drawing is flat
+        cli.check_mode_flags(parser.parse_args(["-s", "x.log", "--lewis",
+                                                "--depth-cue", "0.5"]), parser)
+
+
+def test_depth_cueing_runs_from_the_front_of_the_molecule_to_its_back():
+    import numpy as np
+
+    from microscope.render.glrenderer import MoleculeRenderer
+
+    renderer = MoleculeRenderer()                      # no GL needed for the range
+    renderer._atoms = np.array([[0, 0, 2.0, 0.5], [0, 0, -3.0, 0.5]], dtype=np.float32)
+    view = np.eye(4)
+    view[2, 3] = -10.0                                 # the camera stands 10 A off
+    near, far = renderer._depth_range(view)
+    assert (near, far) == pytest.approx((-7.5, -13.5))
+    assert renderer._depth_range(np.eye(4)) == pytest.approx((2.5, -3.5))
+
+
+def test_every_style_key_is_described_in_the_style_reference():
+    """The style-file reference is generated from the Style dataclass, but its
+    descriptions are written by hand: a new key must get one."""
+    import importlib.util
+    from dataclasses import fields
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "mkdocs_hooks", Path(__file__).parent.parent / "scripts" / "mkdocs_hooks.py")
+    hooks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hooks)
+    table = hooks.style_reference()
+    for f in fields(styles.Style):
+        row = next(line for line in table.splitlines() if line.startswith(f"| `{f.name}` |"))
+        assert not row.rstrip().endswith("|  |"), f"{f.name} has no description"

@@ -24,6 +24,30 @@ but nothing requires it.
     the repository. `pip install -e .` keeps it editable, so a `git pull` is all
     an update takes.
 
+## Try it now
+
+No calculation of your own to hand? The repository comes with real program
+outputs in `tests/data/`, and every one of these opens from the `microscope`
+folder you just cloned:
+
+| Command | What to try |
+|---|---|
+| `scope tests/data/trp.log` | tryptophan: drag to turn it, ++v++ for the other style, ++shift+l++ for the Lewis structure |
+| `scope tests/data/dvb_ir.out` | a frequency job: click a band in the IR spectrum to watch that vibration |
+| `scope tests/data/dvb_ir.fchk` | ++i++ for the orbitals; the arrow keys walk up and down the list |
+| `scope tests/data/g09_dvb_scan.log` | a coordinate scan: the frame bar steps through its geometries |
+| `scope tests/data/water_mo.cube` | an orbital from a cube file; ++i++ to change the isovalue and colours |
+| `scope tests/data/1crn.pdb` | a small protein: ++2++ for sticks, then ++d++ for depth cueing |
+
+The same files make figures without opening a window:
+
+```bash
+scope -s tests/data/trp.log -o trp.png                     # the molecule
+scope -s tests/data/dvb_ir.fchk --mo homo -o homo.png      # its HOMO
+scope -s tests/data/dvb_ir.out --ir -o ir.png              # its IR spectrum
+scope -s tests/data/trp.log --lewis -o trp.svg             # a Lewis structure
+```
+
 ## Open something
 
 ```bash

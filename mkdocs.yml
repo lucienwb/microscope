@@ -11,6 +11,9 @@ copyright: MIT licensed
 
 theme:
   name: material
+  custom_dir: overrides
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -58,9 +61,11 @@ nav:
       - Style files: reference/style-files.md
       - File formats: reference/formats.md
       - Python API: reference/python-api.md
+  - Troubleshooting: troubleshooting.md
   - About:
       - How it works: about/how-it-works.md
       - Development: about/development.md
+      - Citing: about/citing.md
       - Changelog: about/changelog.md
 
 markdown_extensions:

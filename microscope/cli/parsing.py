@@ -286,6 +286,10 @@ def build_style(args):
         style.bond_color = parse_color(args.bond_color)
     if args.no_hbonds:
         style.show_hbonds = False
+    if args.depth_cue is not None:
+        if not 0.0 <= args.depth_cue <= 1.0:
+            raise CliError("--depth-cue is a strength from 0 (off) to 1")
+        style.depth_cue = float(args.depth_cue)
     if args.iso_colors:
         parts = args.iso_colors.split(",")
         if len(parts) != 2:

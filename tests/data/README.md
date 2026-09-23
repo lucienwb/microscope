@@ -13,3 +13,8 @@ Parser test fixtures.
   program outputs.
 - `water.molden` is a hand-written minimal Molden file created for this
   project.
+- `1crn.pdb` is crambin (PDB entry 1CRN; M. M. Teeter, *Proc. Natl. Acad.
+  Sci. USA* **81**, 6014 (1984)), from the [RCSB Protein Data
+  Bank](https://www.rcsb.org/structure/1CRN), whose data are in the public
+  domain (CC0 1.0). It is the small protein the documentation's examples and
+  pictures use.

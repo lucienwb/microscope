@@ -12,6 +12,8 @@ What you can change:
 - **Background**
 - **Bonds** — one colour for every bond, or each bond split by its two atoms
 - **Hydrogen bonds** — on or off
+- **Depth cueing** — how far the back of the molecule fades toward the
+  background; 0 is off, and ++d++ toggles it
 - **Elements** — a colour button for each element that is actually in the open
   structure, so tryptophan shows H, C, N and O rather than a periodic table to
   hunt through
